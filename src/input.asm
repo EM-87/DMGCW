@@ -1,4 +1,4 @@
-; input.asm - Keyboard virtual de charset y campos
+; input.asm - Módulo de entrada (teclado virtual) para DMG Cold Wallet
 INCLUDE "hardware.inc"
 INCLUDE "../inc/constants.inc"
 
@@ -8,8 +8,6 @@ Entry_Input:
     xor a
     ld [Input_CharIndex], a
     ld [Input_EditingField], a  ; 0=Address,1=Amount
-    ld [Input_AddrLen], a
-    ld [Input_AmtLen], a
     
     ; Clear buffers if Start was used to enter
     ld a, [EntryReason]
@@ -20,24 +18,36 @@ Entry_Input:
     ld hl, AddressBuf
     xor a
     ld [hl], a
+    ld [Input_AddrLen], a
     
     ; Clear amount buffer
     ld hl, AmountBuf
     xor a
     ld [hl], a
+    ld [Input_AmtLen], a
+    
+    jr .mainLoop
     
 .skipClear:
+    ; Calculate current lengths of existing buffers
+    ld hl, AddressBuf
+    call CalculateStringLength
+    ld [Input_AddrLen], a
+    
+    ld hl, AmountBuf
+    call CalculateStringLength
+    ld [Input_AmtLen], a
+    
+.mainLoop:
     ; Main input loop
-InputLoop:
-    ; Draw input screen
     call DrawInputScreen
     ; Handle input
-    call ReadInputJoypad
+    call ReadJoypad
     ld a, [JoyState]
     ld b, a            ; Store current state
     ld a, [JoyPrevState]
     cp b               ; Compare with previous
-    jr z, InputLoop    ; If no change, keep polling
+    jr z, .mainLoop    ; If no change, keep polling
     
     ; Store new state
     ld a, b
@@ -59,23 +69,23 @@ InputLoop:
     bit BUTTON_A_BIT, a
     jr nz, .addChar
     
-    jp InputLoop
+    jp .mainLoop
     
 .left:
     call DecrCharIndex
-    jp InputLoop
+    jp .mainLoop
     
 .right:
     call IncrCharIndex
-    jp InputLoop
+    jp .mainLoop
     
 .toggleField:
     call ToggleField
-    jp InputLoop
+    jp .mainLoop
     
 .addChar:
     call AddChar
-    jp InputLoop
+    jp .mainLoop
     
 .exitCancel:
     ; Salir sin guardar cambios
@@ -191,12 +201,6 @@ DrawInputScreen:
     
     ret
 
-; ReadInputJoypad: maneja entrada de joypad con debouncing
-ReadInputJoypad:
-    ; Leer joypad
-    call ReadJoypad
-    ret
-
 ; DecrCharIndex: Decrementa índice de caracter
 DecrCharIndex:
     ld a, [Input_CharIndex]
@@ -241,26 +245,30 @@ ToggleField:
 
 ; AddChar: Añade caracter al campo actual
 AddChar:
-    ; Verificar qué campo está siendo editado
+    ; Determinar qué campo está siendo editado
     ld a, [Input_EditingField]
     or a
-    jr nz, .editAmount
+    jr nz, .addToAmount
     
-    ; Editar dirección
+    ; Añadir a dirección
     ld a, [Input_AddrLen]
     cp MaxAddrLen
-    jr nc, .fieldFull
+    jr nc, .fieldFull  ; No añadir si estamos en el límite
     
-    ; Obtener caracter actual
+    ; Obtener carácter actual
     ld a, [Input_CharIndex]
-    call GetCharsetChar
+    call GetCharsetChar  ; A contiene ahora el carácter
     
     ; Añadir a buffer de dirección
     ld hl, AddressBuf
-    ld c, [Input_AddrLen]
+    ld c, a             ; Guardar caracter temporalmente
+    ld a, [Input_AddrLen]
     ld b, 0
-    add hl, bc
-    ld [hl], a
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, c             ; Recuperar caracter
+    ld [hl], a          ; Guardar carácter en buffer
     
     ; Agregar terminador nulo
     inc hl
@@ -273,22 +281,26 @@ AddChar:
     
     jr .charAdded
     
-.editAmount:
-    ; Editar monto
+.addToAmount:
+    ; Añadir a monto
     ld a, [Input_AmtLen]
     cp MaxAmtLen
-    jr nc, .fieldFull
+    jr nc, .fieldFull  ; No añadir si estamos en el límite
     
-    ; Obtener caracter actual
+    ; Obtener carácter actual
     ld a, [Input_CharIndex]
-    call GetCharsetChar
+    call GetCharsetChar  ; A contiene ahora el carácter
     
     ; Añadir a buffer de monto
     ld hl, AmountBuf
-    ld c, [Input_AmtLen]
+    ld c, a             ; Guardar caracter temporalmente
+    ld a, [Input_AmtLen]
     ld b, 0
-    add hl, bc
-    ld [hl], a
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, c             ; Recuperar caracter
+    ld [hl], a          ; Guardar carácter en buffer
     
     ; Agregar terminador nulo
     inc hl
@@ -314,6 +326,14 @@ GetCharsetChar:
     push hl
     push bc
     
+    ; Verificar límites del índice
+    cp CharsetLen
+    jr c, .indexOk
+    
+    ; Si el índice está fuera de rango, usar el primer carácter
+    xor a
+    
+.indexOk:
     ; Obtener puntero al charset
     ld hl, Charset
     ld b, 0
@@ -325,6 +345,31 @@ GetCharsetChar:
     
     pop bc
     pop hl
+    ret
+
+; CalculateStringLength: Calcula la longitud de una cadena terminada en 0
+; Entrada: HL = puntero a cadena
+; Salida: A = longitud
+CalculateStringLength:
+    push bc
+    push hl
+    
+    ld b, 0    ; Contador
+    
+.loop:
+    ld a, [hl]
+    or a
+    jr z, .done
+    
+    inc hl
+    inc b
+    jr .loop
+    
+.done:
+    ld a, b    ; Poner contador en A
+    
+    pop hl
+    pop bc
     ret
 
 ; --- Datos y constantes ---
