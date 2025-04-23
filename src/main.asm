@@ -38,14 +38,10 @@ Start:
     
     ; Inicializar subsistemas
     call InitSound
-    call SRAM_Init      ; Usar la API de sram_manager
+    call InitSRAM      ; Usar la API de sram_manager
     call InitVRAM
+    call InitInterrupts
     call ShowWarning
-    
-    ; Habilitar interrupciones VBlank
-    ld a, IEF_VBLANK
-    ld [rIE], a
-    ei
     
 MainLoop:
     ; Dibujar menú principal
@@ -55,8 +51,8 @@ MainLoop:
     call UI_WaitVBlank
     
 ReadInputLoop:
-    ; Leer input del joypad
-    call ReadJoypad
+    ; Leer input del joypad con debounce
+    call ReadJoypadWithDebounce
     
     ; Verificar si hay cambios
     ld a, [JoyState]
@@ -149,12 +145,58 @@ ReadInputLoop:
     push de
     ret         ; Saltar a DE (pop PC)
 
+; --- InitInterrupts: Inicialización segura de interrupciones ---
+InitInterrupts:
+    di                  ; Deshabilitar interrupciones
+    
+    ; Limpiar flags pendientes para evitar disparos inmediatos
+    xor a
+    ld [rIF], a
+    
+    ; Habilitar sólo VBlank
+    ld a, IEF_VBLANK
+    ld [rIE], a
+    
+    ; Habilitar interrupciones
+    ei
+    ret
+
+; --- ReadJoypadWithDebounce: Lectura de botones con debounce ---
+ReadJoypadWithDebounce:
+    ; Leer estado actual
+    call ReadJoypad
+    
+    ; Aplicar debounce si hay cambio de estado
+    ld a, [JoyState]
+    ld b, a
+    ld a, [JoyPrevState]
+    cp b
+    ret z               ; Si no hay cambio, retornar
+    
+    ; Esperar frames para evitar rebotes
+    ld b, DEBOUNCE_FRAMES
+.debounce_wait:
+    push bc
+    call UI_WaitVBlank
+    pop bc
+    dec b
+    jr nz, .debounce_wait
+    
+    ; Releer estado para confirmar
+    call ReadJoypad
+    ret
+
 ; --- VBlank Handler ---
 VBlankHandler:
     push af
     push bc
     push de
     push hl
+    
+    ; Incrementar contador de frames para animaciones
+    ld a, [FrameCounter]
+    inc a
+    ld [FrameCounter], a
     
     ; Código de manejo VBlank
     
@@ -164,88 +206,11 @@ VBlankHandler:
     pop af
     reti
 
-; --- Rutinas de UI ---
-; Ahora delegamos a lib/ui.asm
-
-; DrawMenu: Dibuja el menú principal con ítems y cursor
-DrawMenu:
-    ; Limpiar pantalla
-    call UI_ClearScreen
-    
-    ; Dibujar caja para el menú
-    ld a, 1   ; x
-    ld b, 1   ; y
-    ld c, 18  ; width
-    ld d, 16  ; height
-    call UI_DrawBox
-    
-    ; Dibujar título
-    ld hl, MenuTitle
-    ld c, 1   ; box_x
-    ld d, 1   ; box_y
-    ld e, 18  ; box_width
-    call UI_PrintInBox
-    
-    ; Dibujar ítems de menú
-    ld b, 0   ; Contador de ítems
-    ld c, [MenuYStart]  ; Posición Y inicial
-    
-.menuLoop:
-    ; Verificar si hemos terminado
-    ld a, b
-    cp MENU_ITEMS
-    jr z, .done
-    
-    ; Obtener puntero a cadena del ítem
-    ld hl, MenuPtrs
-    ld e, a
-    ld d, 0
-    add hl, de
-    add hl, de  ; HL += A*2 (punteros de 2 bytes)
-    
-    ; Obtener puntero en DE
-    ld e, [hl]
-    inc hl
-    ld d, [hl]
-    
-    ; Mover DE (puntero a cadena) a HL
-    push de
-    pop hl
-    
-    ; Imprimir ítem
-    ld d, c   ; Y = contador + yStart
-    ld e, 4   ; X = 4 (indentado)
-    call UI_PrintStringAtXY
-    
-    ; Verificar si este es el ítem seleccionado
-    ld a, [CursorIndex]
-    cp b
-    jr nz, .nextItem
-    
-    ; Dibujar cursor de selección
-    ld a, [Arrow]
-    ld d, c   ; Y = mismo que el ítem
-    ld e, 2   ; X = 2 (antes del ítem)
-    call UI_PrintAtXY
-    
-.nextItem:
-    ; Incrementar contadores
-    inc b     ; Siguiente ítem
-    inc c     ; Siguiente línea
-    jr .menuLoop
-    
-.done:
-    ; Dibujar mensaje de advertencia
-    ld hl, WarningMsg
-    ld d, 14  ; Y = línea inferior
-    ld e, 2   ; X = 2
-    call UI_PrintStringAtXY
-    
-    ret
-
-; ReadJoypad: Lee el estado del joypad
-; Salida: JoyState actualizado (bit=1 si pulsado)
+; --- ReadJoypad: lee el estado del joypad ---
 ReadJoypad:
+    ; Preservar registros
+    push bc
+    
     ; Leer cruceta
     ld a, P1F_GET_DPAD
     ld [rP1], a
@@ -294,124 +259,24 @@ ReadJoypad:
     ld a, P1F_GET_NONE
     ld [rP1], a
     
+    pop bc
     ret
 
-; InitVRAM: Inicializa VRAM y configura LCD
-InitVRAM:
-    ; Esperar VBlank
-    call UI_WaitVBlank
-    
-    ; Apagar LCD para acceder a VRAM
-    xor a
-    ld [rLCDC], a
-    
-    ; Inicializar paleta
-    ld a, %11100100  ; Negro, oscuro, claro, blanco
-    ld [rBGP], a
-    
-    ; Limpiar VRAM
-    ld hl, $8000
-    ld bc, $2000
-    xor a
-    
-.clearVRAM:
-    ld [hl+], a
-    dec bc
-    ld a, b
-    or c
-    jr nz, .clearVRAM
-    
-    ; Cargar fuente básica (omitido por brevedad)
-    ; ...
-    
-    ; Activar LCD con flags
-    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_BGON
-    ld [rLCDC], a
-    
-    ret
-
-; ShowWarning: Muestra advertencia de seguridad
-ShowWarning:
-    ; Limpiar pantalla
-    call UI_ClearScreen
-    
-    ; Dibujar caja
-    ld a, 1   ; x
-    ld b, 1   ; y
-    ld c, 18  ; width
-    ld d, 16  ; height
-    call UI_DrawBox
-    
-    ; Mostrar título de advertencia
-    ld hl, WarningTitle
-    ld c, 1   ; box_x
-    ld d, 1   ; box_y
-    ld e, 18  ; box_width
-    call UI_PrintInBox
-    
-    ; Mostrar mensaje de advertencia
-    ld hl, WarningMsg1
-    ld d, 5   ; y
-    ld e, 3   ; x
-    call UI_PrintStringAtXY
-    
-    ld hl, WarningMsg2
-    ld d, 7   ; y
-    ld e, 3   ; x
-    call UI_PrintStringAtXY
-    
-    ld hl, WarningMsg3
-    ld d, 9   ; y
-    ld e, 3   ; x
-    call UI_PrintStringAtXY
-    
-    ; Mostrar mensaje para continuar
-    ld hl, WarningPress
-    ld d, 14  ; y
-    ld e, 3   ; x
-    call UI_PrintStringAtXY
-    
-    ; Esperar botón A
-    ld a, [JoyState]
-    ld [JoyPrevState], a
-    
-.waitPress:
-    call ReadJoypad
-    ld a, [JoyState]
-    ld b, a
-    ld a, [JoyPrevState]
-    cp b
-    jr z, .waitPress
-    
-    ; Verificar si se presionó A
-    ld a, [JoyState]
-    bit BUTTON_A_BIT, a
-    jr z, .waitPress
-    
-    ; Actualizar estado previo
-    ld a, [JoyState]
-    ld [JoyPrevState], a
-    
-    ; Reproducir sonido
-    call PlayBeepConfirm
-    
-    ret
-
-; SwitchBank: Cambia al banco ROM especificado
+; --- SwitchBank: Cambia al banco ROM especificado ---
 ; Entrada: A = número de banco
 SwitchBank:
     ld [CurrentBank], a
     ld [$2000], a  ; Registro de selección de banco
     ret
 
-; SwitchBank0: Cambia al banco ROM 0
+; --- SwitchBank0: Cambia al banco ROM 0 ---
 SwitchBank0:
     xor a
     ld [CurrentBank], a
     ld [$2000], a  ; Registro de selección de banco
     ret
 
-; ExitGame: Rutina para "salir" del juego (soft reset)
+; --- ExitGame: Rutina para "salir" del juego (soft reset) ---
 ExitGame:
     ; Guardar datos
     call SRAM_Init
@@ -424,18 +289,27 @@ ExitGame:
     jp $0000
 
 ; --- Variables en WRAM ---
-SECTION "WramVars", WRAM0[$C000]
+SECTION "MainVars", WRAM0[$C000]
 CursorIndex:    DS 1    ; Índice del cursor en menú
 JoyState:       DS 1    ; Estado actual del joypad
 JoyPrevState:   DS 1    ; Estado previo del joypad
 CurrentBank:    DS 1    ; Banco ROM actual
 EntryReason:    DS 1    ; Razón de entrada a un módulo (0=normal, 1=new)
+FrameCounter:   DS 1    ; Contador de frames para animaciones
+
+; --- Buffers compartidos en WRAM ---
+SECTION "SharedBuffers", WRAM0[$C100]
+AddressBuf:          DS 24    ; Buffer para dirección
+AmountBuf:           DS 10    ; Buffer para monto
+CurrentWalletName:   DS WALLET_NAME_LEN  ; Nombre wallet actual
+CurrentWalletAddr:   DS WALLET_ADDR_LEN  ; Dirección wallet actual
 
 ; --- Datos y Mensajes ---
 SECTION "MainData", ROM0
 MenuTitle:      DB "DMG COLD WALLET", 0
 MenuYStart:     DB 3
 Arrow:          DB ">", 0
+MENU_ITEMS:     EQU 7    ; Número de ítems en el menú
 
 MenuPtrs:
     DW Item0
