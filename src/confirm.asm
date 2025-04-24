@@ -1,5 +1,6 @@
 ; confirm.asm - Módulo de confirmación de transacción y log
 INCLUDE "hardware.inc"
+INCLUDE "../inc/constants.inc"
 
 SECTION "ConfirmModule", ROM1[$4500]
 
@@ -191,8 +192,9 @@ LogTransaction:
     ld a, "-"
     ld [hl+], a
     
-    ; Copiar monto
+    ; Copiar monto con límite
     ld de, AmountBuf
+    ld bc, 8  ; Límite máximo para monto
     call CopyString
     
     ; Agregar " a "
@@ -205,6 +207,7 @@ LogTransaction:
     
     ; Copiar dirección (limitado al espacio disponible)
     ld de, AddressBuf
+    ld bc, TX_LOG_LEN - 12  ; Espacio restante
     call CopyString
     
     ; Terminar con 0
@@ -226,42 +229,40 @@ LogTransaction:
     pop af
     ret
 
-; CopyString: Copia una cadena terminada en 0 de DE a HL
-; Respeta el límite de espacio disponible
+; CopyString: Copia una cadena con límite de longitud
+; Entrada: DE = origen, HL = destino, BC = longitud máxima
+; Salida: HL apunta después del último byte copiado
 CopyString:
-    push bc
-    
-    ; Calcular espacio disponible
-    ld bc, TxLog + (MAX_LOG_ENTRIES * TX_LOG_LEN)
-    push hl
-    or a  ; Clear carry flag
-    sbc hl, bc
-    ld c, l    ; C = espacio disponible
-    pop hl
+    push af
     
 .loop:
-    ; Verificar espacio disponible
-    ld a, c
-    or a
-    jr z, .done
+    ; Verificar si quedan bytes en el límite
+    ld a, b
+    or c
+    jr z, .limit_reached
     
-    ; Leer byte
+    ; Leer byte de origen
     ld a, [de]
     
-    ; Verificar fin de cadena
+    ; Comprobar fin de cadena
     or a
     jr z, .done
     
     ; Copiar byte
     ld [hl+], a
-    
-    ; Siguiente byte
     inc de
-    dec c
+    
+    ; Decrementar contador
+    dec bc
     jr .loop
     
+.limit_reached:
+    ; Asegurar terminación
+    xor a
+    ld [hl], a
+    
 .done:
-    pop bc
+    pop af
     ret
 
 ; ShowSuccess: Muestra mensaje de éxito
