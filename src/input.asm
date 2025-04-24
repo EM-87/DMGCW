@@ -41,19 +41,12 @@ Entry_Input:
 .mainLoop:
     ; Main input loop
     call DrawInputScreen
-    ; Handle input
-    call ReadJoypad
-    ld a, [JoyState]
-    ld b, a            ; Store current state
-    ld a, [JoyPrevState]
-    cp b               ; Compare with previous
-    jr z, .mainLoop    ; If no change, keep polling
     
-    ; Store new state
-    ld a, b
-    ld [JoyPrevState], a
+    ; Handle input with proper debounce
+    call ReadJoypadWithDebounce
     
     ; Check exit buttons
+    ld a, [JoyState]
     bit BUTTON_B_BIT, a
     jr nz, .exitCancel
     bit BUTTON_START_BIT, a
@@ -107,6 +100,38 @@ Entry_Input:
     ; Datos válidos, ir a confirmación
     ld a, EXIT_CONFIRM
     ld [ExitReason], a
+    ret
+
+; Nueva función: ReadJoypadWithDebounce
+; Lee el joypad con debounce apropiado
+ReadJoypadWithDebounce:
+    ; Leer estado actual
+    call ReadJoypad
+    ld a, [JoyState]
+    ld b, a
+    
+    ; Comparar con estado previo
+    ld a, [JoyPrevState]
+    cp b
+    jr z, .no_change
+    
+    ; Si hay cambio, aplicar debounce
+    ld a, b
+    ld [JoyPrevState], a
+    
+    ; Esperar frames de debounce
+    ld c, DEBOUNCE_FRAMES
+.debounce_loop:
+    push bc
+    call UI_WaitVBlank
+    pop bc
+    dec c
+    jr nz, .debounce_loop
+    
+    ; Releer estado para confirmar
+    call ReadJoypad
+    
+.no_change:
     ret
 
 ; DrawInputScreen: muestra campos y selector
@@ -253,26 +278,30 @@ AddChar:
     ; Añadir a dirección
     ld a, [Input_AddrLen]
     cp MaxAddrLen
-    jr nc, .fieldFull  ; No añadir si estamos en el límite
+    jr nc, .fieldFull
     
-    ; Obtener carácter actual
+    ; Obtener carácter actual - CORRECCIÓN
     ld a, [Input_CharIndex]
-    call GetCharsetChar  ; A contiene ahora el carácter
+    push af  ; Guardar índice
+    call GetCharsetChar
+    ld c, a  ; Guardar carácter en C
+    pop af   ; Recuperar índice
     
-    ; Añadir a buffer de dirección
+    ; Calcular posición en buffer
     ld hl, AddressBuf
-    ld c, a             ; Guardar caracter temporalmente
     ld a, [Input_AddrLen]
-    ld b, 0
     ld e, a
     ld d, 0
     add hl, de
-    ld a, c             ; Recuperar caracter
-    ld [hl], a          ; Guardar carácter en buffer
+    
+    ; Guardar carácter
+    ld a, c
+    ld [hl], a
     
     ; Agregar terminador nulo
     inc hl
-    ld [hl], 0
+    xor a
+    ld [hl], a
     
     ; Incrementar longitud
     ld a, [Input_AddrLen]
@@ -282,29 +311,33 @@ AddChar:
     jr .charAdded
     
 .addToAmount:
-    ; Añadir a monto
+    ; Similar corrección para monto
     ld a, [Input_AmtLen]
     cp MaxAmtLen
-    jr nc, .fieldFull  ; No añadir si estamos en el límite
+    jr nc, .fieldFull
     
-    ; Obtener carácter actual
+    ; Obtener carácter actual - CORRECCIÓN
     ld a, [Input_CharIndex]
-    call GetCharsetChar  ; A contiene ahora el carácter
+    push af
+    call GetCharsetChar
+    ld c, a
+    pop af
     
-    ; Añadir a buffer de monto
+    ; Calcular posición en buffer
     ld hl, AmountBuf
-    ld c, a             ; Guardar caracter temporalmente
     ld a, [Input_AmtLen]
-    ld b, 0
     ld e, a
     ld d, 0
     add hl, de
-    ld a, c             ; Recuperar caracter
-    ld [hl], a          ; Guardar carácter en buffer
+    
+    ; Guardar carácter
+    ld a, c
+    ld [hl], a
     
     ; Agregar terminador nulo
     inc hl
-    ld [hl], 0
+    xor a
+    ld [hl], a
     
     ; Incrementar longitud
     ld a, [Input_AmtLen]
@@ -326,23 +359,26 @@ GetCharsetChar:
     push hl
     push bc
     
-    ; Verificar límites del índice
+    ; Validar que el índice está dentro de límites
     cp CharsetLen
-    jr c, .indexOk
+    jr nc, .outOfBounds
     
-    ; Si el índice está fuera de rango, usar el primer carácter
-    xor a
-    
-.indexOk:
-    ; Obtener puntero al charset
+    ; Calcular dirección de carácter
     ld hl, Charset
     ld b, 0
     ld c, a
-    add hl, bc    ; HL = Charset + índice
+    add hl, bc
     
     ; Leer carácter
     ld a, [hl]
+    jr .done
     
+.outOfBounds:
+    ; Si índice fuera de rango, usar primer carácter
+    ld hl, Charset
+    ld a, [hl]
+    
+.done:
     pop bc
     pop hl
     ret
