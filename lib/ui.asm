@@ -1,5 +1,5 @@
 ; ui.asm - Primitivas de interfaz gráfica para DMG Cold Wallet
-INCLUDE "hardware.inc"
+INCLUDE "../inc/hardware.inc"
 INCLUDE "../inc/constants.inc"
 
 ; --- API pública ---
@@ -17,7 +17,7 @@ UI_ClearScreen:
     
     ; Llenar pantalla con espacios
     ld hl, _SCRN0
-    ld bc, 32*18 ; 32 columnas * 18 filas visibles
+    ld bc, SCRN_VX_B * SCRN_Y_B  ; Usar constantes definidas
     ld a, " "    ; Caracter espacio
     
 .loop:
@@ -26,9 +26,6 @@ UI_ClearScreen:
     ld a, b
     or c
     jr nz, .loop
-    
-    ; Restaurar 'a' a espacio
-    ld a, " "
     
     pop hl
     pop de
@@ -45,12 +42,15 @@ UI_DrawBox:
     push de
     push hl
     
-    ; Guardar posición y dimensiones
-    ld h, a    ; H = x
-    ld l, b    ; L = y
+    ; Guardar parámetros originales
+    push af    ; Guardar x
+    push bc    ; Guardar y, width
+    push de    ; Guardar height
     
     ; Calcular posición en VRAM
-    call UI_SetVRAMPosition
+    ld e, a    ; E = x
+    ld d, b    ; D = y
+    call UI_GetVRAMPosition
     
     ; Dibujar esquina superior izquierda
     ld a, "+"
@@ -71,48 +71,57 @@ UI_DrawBox:
     ld a, "+"
     ld [hl], a
     
-    ; Dibujar bordes laterales y contenido
-    ld b, d     ; b = alto
-    dec b       ; Alto - 2 (por las esquinas)
-    dec b
+    ; Restaurar parámetros para laterales
+    pop de    ; height
+    pop bc    ; y, width
+    pop af    ; x
+    
+    push af   ; Guardar x
+    push bc   ; Guardar y, width
+    push de   ; Guardar height
+    
+    ; Dibujar bordes laterales
+    ld e, d   ; E = height
+    dec e     ; Alto - 2 (por las esquinas)
+    dec e
     
 .rows:
-    push bc
-    
     ; Avanzar a la siguiente fila
-    ld a, l
-    inc a
-    ld l, a
-    call UI_SetVRAMPosition
+    inc b     ; y++
+    push de   ; Guardar contador de filas
+    ld d, b   ; D = y
+    ld e, a   ; E = x
+    call UI_GetVRAMPosition
+    pop de    ; Recuperar contador
     
     ; Dibujar borde izquierdo
-    ld a, "|"
-    ld [hl+], a
+    ld [hl], "|"
     
-    ; Dibujar espacios en el centro
-    ld a, " "
-    ld b, c
-    dec b
-    dec b
-    
-.spaces:
-    ld [hl+], a
-    dec b
-    jr nz, .spaces
+    ; Avanzar al borde derecho
+    push de
+    ld d, 0
+    ld e, c   ; width
+    dec e
+    add hl, de
+    pop de
     
     ; Dibujar borde derecho
-    ld a, "|"
-    ld [hl], a
+    ld [hl], "|"
     
-    pop bc
-    dec b
+    dec e
     jr nz, .rows
     
-    ; Dibujar borde inferior
-    ld a, l
-    inc a
-    ld l, a
-    call UI_SetVRAMPosition
+    ; Restaurar y calcular posición para borde inferior
+    pop de    ; height
+    pop bc    ; y, width
+    pop af    ; x
+    
+    ld d, b   ; D = y
+    add d, e  ; D = y + height - 1
+    dec d
+    ld e, a   ; E = x
+    
+    call UI_GetVRAMPosition
     
     ; Dibujar esquina inferior izquierda
     ld a, "+"
@@ -142,23 +151,25 @@ UI_DrawBox:
 ; UI_PrintAtXY: Imprime un carácter en la posición especificada
 ; Entrada: A=carácter, D=y, E=x
 UI_PrintAtXY:
+    push af
     push bc
+    push de
     push hl
     
     ; Preservar carácter
-    ld b, a
+    push af
     
     ; Calcular posición en VRAM
-    ld h, e    ; x
-    ld l, d    ; y
-    call UI_SetVRAMPosition
+    call UI_GetVRAMPosition
     
-    ; Escribir carácter
-    ld a, b
+    ; Recuperar y escribir carácter
+    pop af
     ld [hl], a
     
     pop hl
+    pop de
     pop bc
+    pop af
     ret
 
 ; UI_PrintStringAtXY: Imprime una cadena en la posición especificada
@@ -169,18 +180,18 @@ UI_PrintStringAtXY:
     push de
     push hl
     
-    ; Calcular posición en VRAM
-    ld a, e    ; x
-    ld b, d    ; y
-    call UI_CalculateVRAMPosition ; HL = posición en VRAM
+    ; Guardar puntero a cadena
+    push hl
     
-    ; Guardar posición VRAM en DE
+    ; Calcular posición en VRAM
+    call UI_GetVRAMPosition
+    
+    ; HL = posición VRAM, guardarlo en DE
     ld d, h
     ld e, l
     
-    ; Restaurar puntero a cadena
+    ; Recuperar puntero a cadena
     pop hl
-    push hl
     
 .loop:
     ld a, [hl+]     ; Cargar siguiente carácter
@@ -207,18 +218,8 @@ UI_PrintInBox:
     push hl
     
     ; Calcular longitud de la cadena
-    ld b, 0    ; B = contador de caracteres
     push hl
-    
-.strLen:
-    ld a, [hl+]
-    or a
-    jr z, .gotLen
-    inc b
-    jr .strLen
-    
-.gotLen:
-    ; Restaurar puntero a cadena
+    call UI_StringLength
     pop hl
     
     ; Calcular posición X centrada
@@ -241,12 +242,12 @@ UI_PrintInBox:
 ; Entrada: D=y, E=x de inicio, B=longitud a limpiar
 UI_ClearLine:
     push af
+    push bc
+    push de
     push hl
     
     ; Calcular posición en VRAM
-    ld h, e    ; x
-    ld l, d    ; y
-    call UI_SetVRAMPosition
+    call UI_GetVRAMPosition
     
     ; Limpiar línea con espacios
     ld a, " "
@@ -257,12 +258,13 @@ UI_ClearLine:
     jr nz, .loop
     
     pop hl
+    pop de
+    pop bc
     pop af
     ret
 
 ; UI_WaitVBlank: Espera a que ocurra una interrupción VBlank
 UI_WaitVBlank:
-    ; Esperar a que LCD esté en VBlank
     push af
     
 .wait:
@@ -274,136 +276,136 @@ UI_WaitVBlank:
     pop af
     ret
 
-; --- Funciones auxiliares internas ---
+; --- Funciones auxiliares internas unificadas ---
 
-; UI_SetVRAMPosition: Establece HL a la posición VRAM para coordenadas (H,L)
-; Entrada: H=x, L=y
+; UI_GetVRAMPosition: Calcula dirección VRAM para coordenadas (D,E)
+; Entrada: D=y, E=x
 ; Salida: HL=dirección en VRAM
-UI_SetVRAMPosition:
+UI_GetVRAMPosition:
     push af
     push bc
     push de
     
     ; HL = _SCRN0 + y * 32 + x
-    ld a, l        ; A = y
-    ld l, 0
-    ld c, 32
-    call UI_Multiply  ; HL = y * 32
-    
-    ld a, h        ; A = x
     ld h, 0
-    ld l, a        ; HL = x
-    add hl, bc     ; HL = y * 32 + x
+    ld l, d        ; HL = y
+    
+    ; Optimización: multiplicar por 32 usando shifts
+    add hl, hl     ; HL *= 2
+    add hl, hl     ; HL *= 4
+    add hl, hl     ; HL *= 8
+    add hl, hl     ; HL *= 16
+    add hl, hl     ; HL *= 32
+    
+    ld b, 0
+    ld c, e        ; BC = x
+    add hl, bc     ; HL += x
     
     ld bc, _SCRN0
-    add hl, bc     ; HL = _SCRN0 + y * 32 + x
+    add hl, bc     ; HL += _SCRN0
     
     pop de
     pop bc
     pop af
     ret
 
-; UI_CalculateVRAMPosition: Calcula la dirección VRAM para coordenadas (A,B)
-; Entrada: A=x, B=y
-; Salida: HL=dirección en VRAM
-UI_CalculateVRAMPosition:
-    push de
+; UI_StringLength: Calcula la longitud de una cadena
+; Entrada: HL = puntero a cadena
+; Salida: B = longitud
+UI_StringLength:
+    push af
+    push hl
     
-    ; HL = _SCRN0 + y * 32 + x
-    ld d, 0
-    ld e, b        ; DE = y
-    ld h, 0
-    ld l, 32
-    call UI_MultiplyHL_DE  ; HL = y * 32
+    ld b, 0    ; Contador
     
-    ld b, 0
-    ld c, a        ; BC = x
-    add hl, bc     ; HL = y * 32 + x
+.loop:
+    ld a, [hl+]
+    or a
+    jr z, .done
+    inc b
+    jr .loop
     
-    ld bc, _SCRN0
-    add hl, bc     ; HL = _SCRN0 + y * 32 + x
-    
-    pop de
+.done:
+    pop hl
+    pop af
     ret
 
-; UI_Multiply: Multiplica A por C, resultado en HL
-; Entrada: A, C = operandos
-; Salida: HL = A * C
-UI_Multiply:
-    ld b, 0        ; BC = C
-    ld h, 0
-    ld l, a        ; HL = A
+; --- Funciones adicionales de utilidad ---
+
+; UI_DrawHorizontalLine: Dibuja una línea horizontal
+; Entrada: D=y, E=x inicial, B=longitud, C=carácter
+UI_DrawHorizontalLine:
+    push af
+    push bc
+    push de
+    push hl
     
-    ; Si alguno es cero, resultado es cero
-    or a
-    ret z
+    call UI_GetVRAMPosition
+    
+    ld a, c    ; Carácter para la línea
+    
+.loop:
+    ld [hl+], a
+    dec b
+    jr nz, .loop
+    
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ret
+
+; UI_DrawVerticalLine: Dibuja una línea vertical
+; Entrada: D=y inicial, E=x, B=longitud, C=carácter
+UI_DrawVerticalLine:
+    push af
+    push bc
+    push de
+    push hl
+    
+.loop:
+    push bc
+    push de
+    call UI_GetVRAMPosition
     
     ld a, c
-    or a
-    ret z
+    ld [hl], a
     
-    ; HL = HL * BC
-    call UI_MultiplyHL_BC
-    ret
-
-; UI_MultiplyHL_BC: Multiplica HL por BC
-; Entrada: HL, BC = operandos
-; Salida: HL = HL * BC
-UI_MultiplyHL_BC:
-    ; Preservar DE
-    push de
-    
-    ; Guardar valor original de HL
-    ld d, h
-    ld e, l
-    
-    ; Inicializar resultado
-    ld hl, 0
-    
-.loop:
-    ; Verificar si BC es cero
-    ld a, b
-    or c
-    jr z, .done
-    
-    ; Sumar HL += DE
-    add hl, de
-    
-    ; Decrementar contador
-    dec bc
-    jr .loop
-    
-.done:
     pop de
+    pop bc
+    
+    inc d      ; Siguiente fila
+    dec b
+    jr nz, .loop
+    
+    pop hl
+    pop de
+    pop bc
+    pop af
     ret
 
-; UI_MultiplyHL_DE: Multiplica HL por DE
-; Entrada: HL, DE = operandos
-; Salida: HL = HL * DE
-UI_MultiplyHL_DE:
-    ; Similar a UI_MultiplyHL_BC pero usando DE como segundo operando
-    push bc
-    
-    ; Guardar valor original de HL
-    ld b, h
-    ld c, l
-    
-    ; Inicializar resultado
-    ld hl, 0
-    
-.loop:
-    ; Verificar si DE es cero
-    ld a, d
-    or e
-    jr z, .done
-    
-    ; Sumar HL += BC
-    add hl, bc
-    
-    ; Decrementar contador
-    dec de
-    jr .loop
-    
-.done:
-    pop bc
-    ret
+; --- Macros para facilitar operaciones comunes ---
+
+; PRINT_AT: Macro para imprimir en posición específica
+; Uso: PRINT_AT cadena, x, y
+PRINT_AT: MACRO
+    ld hl, \1
+    ld e, \2
+    ld d, \3
+    call UI_PrintStringAtXY
+ENDM
+
+; DRAW_BOX_AT: Macro para dibujar caja
+; Uso: DRAW_BOX_AT x, y, width, height
+DRAW_BOX_AT: MACRO
+    ld a, \1
+    ld b, \2
+    ld c, \3
+    ld d, \4
+    call UI_DrawBox
+ENDM
+
+; --- Mensajes de error para UI ---
+SECTION "UIMessages", ROM0
+UI_NoMemoryMsg:    DB "Error: No hay memoria", 0
+UI_VRAMBusyMsg:    DB "Error: VRAM ocupada", 0
