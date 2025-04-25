@@ -4,10 +4,6 @@ INCLUDE "../inc/constants.inc"
 
 SECTION "ConfirmModule", ROM1[$4500]
 
-; --- Constants ---
-MAX_LOG_ENTRIES:    EQU 5   ; Número máximo de entradas en el log
-TX_LOG_LEN:         EQU 32  ; Longitud máxima de cada entrada en el log
-
 ; --- Entry Point ---
 Entry_Confirm:
     push af
@@ -53,8 +49,8 @@ Entry_Confirm:
     ; Reproducir sonido de confirmación
     call PlayBeepConfirm
     
-    ; Guardar transacción en el log
-    call LogTransaction
+    ; Guardar transacción en el log usando SRAM API
+    call SRAM_LogTransaction
     
     ; Mostrar mensaje de éxito
     call ShowSuccess
@@ -90,179 +86,55 @@ Entry_Confirm:
 ; DrawConfirmScreen: Dibuja la pantalla de confirmación
 DrawConfirmScreen:
     ; Limpiar pantalla
-    call ClearScreen
+    call UI_ClearScreen
     
     ; Dibujar caja
     ld a, 1   ; x
     ld b, 1   ; y
     ld c, 18  ; width
     ld d, 16  ; height
-    call DrawBox
+    call UI_DrawBox
     
     ; Dibujar título
     ld hl, ConfirmTitle
     ld c, 1   ; box_x
     ld d, 1   ; box_y
     ld e, 18  ; box_width
-    call PrintInBox
+    call UI_PrintInBox
     
     ; Mostrar dirección
     ld hl, AddressLabel
     ld d, 3   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ld hl, AddressBuf
     ld d, 4   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Mostrar monto
     ld hl, AmountLabel
     ld d, 6   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ld hl, AmountBuf
     ld d, 7   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Mostrar instrucciones
     ld hl, ConfirmInstr1
     ld d, 12  ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ld hl, ConfirmInstr2
     ld d, 13  ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
-    ret
-
-; LogTransaction: Guarda la transacción actual en el log
-LogTransaction:
-    push af
-    push bc
-    push de
-    push hl
-    
-    ; Habilitar SRAM
-    ld a, CART_SRAM_ENABLE
-    ld [$0000], a
-    
-    ; Verificar si el log está lleno
-    ld a, [TxCount]
-    cp MAX_LOG_ENTRIES
-    jr c, .notFull
-    
-    ; Si está lleno, desplazar entradas (eliminar la más antigua)
-    ld hl, TxLog + TX_LOG_LEN  ; Segunda entrada
-    ld de, TxLog              ; Primera entrada
-    ld bc, (MAX_LOG_ENTRIES - 1) * TX_LOG_LEN
-    call CopyMemory
-    
-    ; Ahora TxCount = MAX_LOG_ENTRIES (no cambia)
-    jr .prepareEntry
-    
-.notFull:
-    ; Incrementar contador de transacciones
-    inc a
-    ld [TxCount], a
-    
-.prepareEntry:
-    ; Calcular posición para la nueva entrada
-    ; Si desplazamos, va en la última posición
-    ; Si no, va en la posición TxCount-1
-    ld a, [TxCount]
-    dec a
-    ld b, a
-    ld c, TX_LOG_LEN
-    call Multiply  ; HL = (TxCount-1) * TX_LOG_LEN
-    
-    ; HL = offset en el log
-    ld de, TxLog
-    add hl, de
-    
-    ; Construir entrada en el formato "XXXXX a YYYYY"
-    ; donde XXXXX es el monto y YYYYY es la dirección
-    
-    ; Comenzar con el símbolo "-" (envío)
-    ld a, "-"
-    ld [hl+], a
-    
-    ; Copiar monto con límite
-    ld de, AmountBuf
-    ld bc, 8  ; Límite máximo para monto
-    call CopyString
-    
-    ; Agregar " a "
-    ld a, " "
-    ld [hl+], a
-    ld a, "a"
-    ld [hl+], a
-    ld a, " "
-    ld [hl+], a
-    
-    ; Copiar dirección (limitado al espacio disponible)
-    ld de, AddressBuf
-    ld bc, TX_LOG_LEN - 12  ; Espacio restante
-    call CopyString
-    
-    ; Terminar con 0
-    xor a
-    ld [hl], a
-    
-    ; Calcular y guardar nuevo checksum
-    call CalcChecksum
-    ld hl, $A000 + CHECKSUM_OFFSET
-    ld [hl], a
-    
-    ; Desactivar SRAM
-    xor a
-    ld [$0000], a
-    
-    pop hl
-    pop de
-    pop bc
-    pop af
-    ret
-
-; CopyString: Copia una cadena con límite de longitud
-; Entrada: DE = origen, HL = destino, BC = longitud máxima
-; Salida: HL apunta después del último byte copiado
-CopyString:
-    push af
-    
-.loop:
-    ; Verificar si quedan bytes en el límite
-    ld a, b
-    or c
-    jr z, .limit_reached
-    
-    ; Leer byte de origen
-    ld a, [de]
-    
-    ; Comprobar fin de cadena
-    or a
-    jr z, .done
-    
-    ; Copiar byte
-    ld [hl+], a
-    inc de
-    
-    ; Decrementar contador
-    dec bc
-    jr .loop
-    
-.limit_reached:
-    ; Asegurar terminación
-    xor a
-    ld [hl], a
-    
-.done:
-    pop af
     ret
 
 ; ShowSuccess: Muestra mensaje de éxito
@@ -271,7 +143,7 @@ ShowSuccess:
     ld hl, SuccessMsg
     ld d, 10  ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ret
 
@@ -284,40 +156,40 @@ ShowCancel:
     ld hl, CancelMsg
     ld d, 10  ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ret
 
 ; ShowNoData: Muestra mensaje de error (no hay datos)
 ShowNoData:
     ; Limpiar pantalla
-    call ClearScreen
+    call UI_ClearScreen
     
     ; Dibujar caja
     ld a, 1   ; x
     ld b, 1   ; y
     ld c, 18  ; width
     ld d, 16  ; height
-    call DrawBox
+    call UI_DrawBox
     
     ; Dibujar título
     ld hl, ErrorTitle
     ld c, 1   ; box_x
     ld d, 1   ; box_y
     ld e, 18  ; box_width
-    call PrintInBox
+    call UI_PrintInBox
     
     ; Mostrar mensaje de error
     ld hl, NoDataMsg
     ld d, 6   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Mostrar instrucciones
     ld hl, BackMsg
     ld d, 12  ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ret
 
@@ -329,7 +201,9 @@ ClearMsgArea:
     push hl
     
     ; Calcular posición en VRAM
-    ld hl, _SCRN0 + (10 * 32) + 3
+    ld d, 10  ; y
+    ld e, 3   ; x
+    call UI_GetVRAMPosition  ; Usando la versión unificada
     
     ; Limpiar línea
     ld a, " "
@@ -361,10 +235,10 @@ ClearInputBuffers:
     xor a
     ld [hl], a
     
-    ; Resetear contadores
-    xor a
-    ld [Input_AddrLen], a
-    ld [Input_AmtLen], a
+    ; Resetear contadores en src/input.asm (si son accesibles)
+    ; xor a
+    ; ld [Input_AddrLen], a
+    ; ld [Input_AmtLen], a
     
     pop hl
     pop af
