@@ -1,16 +1,9 @@
 ; link.asm - Comunicación por cable Link con protocolo robusto
 ; Protocolo: [0xA5][len][payload...][cs] -> ACK/NACK
 INCLUDE "hardware.inc"
+INCLUDE "../inc/constants.inc"
 
 SECTION "LinkModule", ROM1[$6000]
-
-; --- Constantes Link ---
-TIMEOUT_COUNT:  EQU $8000  ; Bucle de espera antes de timeout
-MAX_RETRIES:    EQU 3      ; Reintentos de envío
-START_BYTE:     EQU $A5    ; Byte de inicio de trama
-ACK_BYTE:       EQU $5A    ; Confirmación positiva
-NACK_BYTE:      EQU $FF    ; Confirmación negativa
-MAX_PAYLOAD:    EQU 64     ; Tamaño máximo de payload
 
 ; --- Entry point ---
 Entry_LinkTest:
@@ -20,27 +13,27 @@ Entry_LinkTest:
     push hl
     
     ; Mostrar pantalla de prueba Link
-    call ClearScreen
+    call UI_ClearScreen
     
     ; Dibujar caja para UI
     ld a, 1   ; x
     ld b, 1   ; y
     ld c, 18  ; width
     ld d, 16  ; height
-    call DrawBox
+    call UI_DrawBox
     
     ; Título
     ld hl, LinkTestTitle
     ld c, 1   ; box_x
     ld d, 1   ; box_y 
     ld e, 18  ; box_width
-    call PrintInBox
+    call UI_PrintInBox
     
     ; Instrucciones
     ld hl, LinkInstruction
     ld d, 3   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Esperar botón A
     call WaitButtonA
@@ -49,7 +42,7 @@ Entry_LinkTest:
     ld hl, LinkSending
     ld d, 5   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Preparar payload de prueba
     ld hl, LinkTestData    ; Origen
@@ -71,18 +64,18 @@ Entry_LinkTest:
     ld hl, LinkSuccess
     ld d, 7   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Mostrar datos enviados
     ld hl, LinkDataSent
     ld d, 9   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ld hl, LinkBuffer
     ld d, 10  ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     jr .wait_exit
     
@@ -91,27 +84,27 @@ Entry_LinkTest:
     ld hl, LinkError
     ld d, 7   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Mostrar código de error
     ld hl, LinkErrorCode
     ld d, 9   ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Convertir código de error a ASCII y mostrar
     ld a, [LinkLastError]
     call ByteToHex
     ld d, 9   ; y
     ld e, 15  ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
 .wait_exit:
     ; Instrucciones para salir
     ld hl, LinkPressB
     ld d, 14  ; y
     ld e, 3   ; x
-    call PrintStringAtXY
+    call UI_PrintStringAtXY
     
     ; Esperar botón B
     call WaitButtonB
@@ -149,7 +142,7 @@ link_send_byte:
     ld [rSC], a
     
     ; Esperar a que se complete la transferencia o timeout
-    ld bc, TIMEOUT_COUNT
+    ld bc, TIMEOUT_SHORT  ; Usar timeout parametrizado
 .wait_send:
     ld a, [rSC]
     bit 7, a         ; Comprobar si transferencia en curso
@@ -187,7 +180,7 @@ link_receive_byte:
     ld [rSC], a
     
     ; Esperar dato o timeout
-    ld bc, TIMEOUT_COUNT
+    ld bc, TIMEOUT_SHORT  ; Usar timeout parametrizado
 .wait_receive:
     ld a, [rSC]
     bit 7, a
@@ -307,14 +300,14 @@ link_send_packet:
     
 .timeout_error:
     ; Error de timeout
-    ld a, 1
+    ld a, LINK_ERR_TIMEOUT
     ld [LinkLastError], a
     pop hl
     ret
     
 .retry_error:
     ; Agotados los reintentos
-    ld a, 2
+    ld a, LINK_ERR_RETRY
     ld [LinkLastError], a
     pop hl
     ret
@@ -421,14 +414,14 @@ link_receive_packet:
     
 .timeout_error:
     ; Error de timeout
-    ld a, 1
+    ld a, LINK_ERR_TIMEOUT
     ld [LinkLastError], a
     pop de
     ret
     
 .length_error:
     ; Error de longitud
-    ld a, 3
+    ld a, LINK_ERR_LENGTH
     ld [LinkLastError], a
     
     ; Enviar NACK
@@ -440,7 +433,7 @@ link_receive_packet:
     
 .checksum_error:
     ; Error de checksum
-    ld a, 4
+    ld a, LINK_ERR_CHECKSUM
     ld [LinkLastError], a
     
     ; Enviar NACK
@@ -448,59 +441,6 @@ link_receive_packet:
     call link_send_byte
     
     pop de
-    ret
-
-; ByteToHex: Convierte un byte en su representación hexadecimal
-; Entrada: A = byte a convertir
-; Salida: LinkHexBuffer contiene la cadena (2 caracteres + terminador)
-ByteToHex:
-    push af
-    push bc
-    push de
-    push hl
-    
-    ; Guardar valor original
-    ld b, a
-    
-    ; Convertir nibble alto
-    srl a
-    srl a
-    srl a
-    srl a
-    call .nibble_to_hex
-    ld [LinkHexBuffer], a
-    
-    ; Convertir nibble bajo
-    ld a, b
-    and $0F
-    call .nibble_to_hex
-    ld [LinkHexBuffer+1], a
-    
-    ; Agregar terminador
-    xor a
-    ld [LinkHexBuffer+2], a
-    
-    ; Devolver puntero a buffer
-    ld hl, LinkHexBuffer
-    
-    pop hl
-    pop de
-    pop bc
-    pop af
-    ret
-    
-.nibble_to_hex:
-    ; Convertir valor 0-15 a caracter hex
-    cp 10
-    jr c, .is_digit
-    
-    ; Es A-F
-    add "A" - 10
-    ret
-    
-.is_digit:
-    ; Es 0-9
-    add "0"
     ret
 
 ; WaitButtonA: Espera hasta que se pulse el botón A
@@ -551,22 +491,6 @@ WaitButtonB:
     pop af
     ret
 
-; CopyMemory: Copia BC bytes desde HL a DE
-CopyMemory:
-    inc b
-    inc c
-    jr .start
-.loop:
-    ld a, [hl+]
-    ld [de], a
-    inc de
-.start:
-    dec c
-    jr nz, .loop
-    dec b
-    jr nz, .loop
-    ret
-
 ; --- Datos y mensajes ---
 SECTION "LinkData", ROM1
 LinkTestTitle:    DB "TEST DE LINK", 0
@@ -585,7 +509,6 @@ LinkTestLen:      DB 21
 ; --- Variables en WRAM ---
 SECTION "LinkVars", WRAM0[$C800]
 LinkBuffer:       DS MAX_PAYLOAD    ; Buffer para datos
-LinkHexBuffer:    DS 3              ; Buffer para conversión hex (2 chars + null)
 LinkPacketPtr:    DS 2              ; Puntero a paquete actual
 LinkPayloadLen:   DS 1              ; Longitud de payload
 LinkChecksum:     DS 1              ; Checksum calculado
