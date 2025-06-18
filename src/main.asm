@@ -297,6 +297,80 @@ CurrentBank:    DS 1    ; Banco ROM actual
 EntryReason:    DS 1    ; Razón de entrada a un módulo (0=normal, 1=new)
 FrameCounter:   DS 1    ; Contador de frames para animaciones
 
+; Agregar esto en la sección de variables WRAM
+SECTION "MainVars", WRAM0[$C000]
+CursorIndex:    DS 1
+JoyState:       DS 1
+JoyPrevState:   DS 1    ; AGREGADO
+CurrentBank:    DS 1
+EntryReason:    DS 1
+FrameCounter:   DS 1
+
+; Corregir InitVRAM - usar tile 0 en lugar de espacio:
+InitVRAM:
+    push af
+    push bc
+    push hl
+    
+    call UI_WaitVBlank
+    
+    xor a
+    ld [rLCDC], a
+    
+    ; Limpiar tile data
+    ld hl, $8000
+    ld bc, $1000
+    xor a
+    call FillMemory
+    
+    ; Limpiar background map con tile 0
+    ld hl, $9800
+    ld bc, $0400
+    xor a               ; CORRECCIÓN: usar 0, no " "
+    call FillMemory
+    
+    call LoadFont
+    
+    ld a, %11100100
+    ld [rBGP], a
+    
+    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_BGON
+    ld [rLCDC], a
+    
+    pop hl
+    pop bc
+    pop af
+    ret
+
+; Corregir LoadFont:
+LoadFont:
+    push af
+    push bc
+    push de
+    push hl
+    
+    ld hl, FontData
+    ld de, $8200        ; CORRECCIÓN: $8000 + (32 * 16)
+    ld bc, 96 * 16
+    
+.copy_loop:
+    ld a, [hl+]
+    ld [de], a
+    inc de
+    dec bc
+    ld a, b
+    or c
+    jr nz, .copy_loop
+    
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ret
+
+
+
+
 ; --- Buffers compartidos en WRAM ---
 SECTION "SharedBuffers", WRAM0[$C100]
 AddressBuf:          DS 24    ; Buffer para dirección
