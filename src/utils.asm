@@ -306,3 +306,79 @@ WaitVBlank:
     jr c, .wait
     pop af
     ret
+
+
+; Agregar a utils.asm
+
+; StringLength: Calcula la longitud de una cadena terminada en 0
+; Entrada: HL = puntero a cadena
+; Salida: A = longitud
+StringLength:
+    push bc
+    push hl
+    
+    ld b, 0
+.loop:
+    ld a, [hl+]
+    or a
+    jr z, .done
+    inc b
+    jr .loop
+    
+.done:
+    ld a, b
+    
+    pop hl
+    pop bc
+    ret
+
+; DelayFrames: Espera A frames
+; Entrada: A = número de frames a esperar
+DelayFrames:
+    push bc
+    
+    ld b, a
+.loop:
+    push bc
+    call WaitVBlank
+    pop bc
+    dec b
+    jr nz, .loop
+    
+    pop bc
+    ret
+
+; CopyStringWithLimit: Copia cadena con límite
+; Entrada: HL = origen, DE = destino, BC = límite máximo
+; Salida: DE apunta al byte después del último copiado
+CopyStringWithLimit:
+    push af
+    
+.loop:
+    ; Verificar límite
+    ld a, b
+    or c
+    jr z, .limit_reached
+    
+    ; Copiar carácter
+    ld a, [hl+]
+    ld [de], a
+    
+    ; Verificar si es terminador
+    or a
+    jr z, .done
+    
+    ; Siguiente carácter
+    inc de
+    dec bc
+    jr .loop
+    
+.limit_reached:
+    ; Forzar terminador
+    xor a
+    ld [de], a
+    inc de
+    
+.done:
+    pop af
+    ret
