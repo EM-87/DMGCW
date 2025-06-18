@@ -346,3 +346,251 @@ EntryPoints:
     DW Entry_QR_Gen
     DW Entry_Printer
     DW ExitGame
+
+; Agregar estas funciones al main.asm existente
+
+; --- InitVRAM: Inicialización de VRAM ---
+InitVRAM:
+    push af
+    push bc
+    push hl
+    
+    ; Esperar VBlank antes de tocar VRAM
+    call UI_WaitVBlank
+    
+    ; Apagar LCD temporalmente
+    xor a
+    ld [rLCDC], a
+    
+    ; Limpiar tile data ($8000-$8FFF)
+    ld hl, $8000
+    ld bc, $1000
+    xor a
+    call FillMemory
+    
+    ; Limpiar background map ($9800-$9BFF)
+    ld hl, $9800
+    ld bc, $0400
+    ld a, " "         ; Espacio en blanco
+    call FillMemory
+    
+    ; Cargar font ASCII básica
+    call LoadFont
+    
+    ; Configurar paleta
+    ld a, %11100100   ; Negro, gris oscuro, gris claro, blanco
+    ld [rBGP], a
+    
+    ; Reactivar LCD
+    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_BGON
+    ld [rLCDC], a
+    
+    pop hl
+    pop bc
+    pop af
+    ret
+
+; --- LoadFont: Carga fuente ASCII en VRAM ---
+LoadFont:
+    push af
+    push bc
+    push de
+    push hl
+    
+    ; La fuente debe estar en ROM (FontData)
+    ld hl, FontData
+    ld de, $8000 + (" " * 16)  ; Empezar en tile del espacio
+    ld bc, 96 * 16              ; 96 caracteres x 16 bytes cada uno
+    
+.copy_loop:
+    ld a, [hl+]
+    ld [de], a
+    inc de
+    dec bc
+    ld a, b
+    or c
+    jr nz, .copy_loop
+    
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ret
+
+; --- FillMemory: Llena memoria con un valor ---
+FillMemory:
+    push de
+.loop:
+    ld [hl+], a
+    dec bc
+    ld a, b
+    or c
+    jr nz, .loop
+    pop de
+    ret
+
+; --- ShowWarning: Muestra advertencia inicial ---
+ShowWarning:
+    push af
+    push bc
+    push de
+    push hl
+    
+    ; Limpiar pantalla
+    call UI_ClearScreen
+    
+    ; Dibujar caja de advertencia
+    ld a, 2    ; x
+    ld b, 4    ; y
+    ld c, 16   ; width
+    ld d, 10   ; height
+    call UI_DrawBox
+    
+    ; Título
+    ld hl, WarningTitle
+    ld c, 2    ; box_x
+    ld d, 4    ; box_y
+    ld e, 16   ; box_width
+    call UI_PrintInBox
+    
+    ; Mensajes
+    ld hl, WarningMsg1
+    ld d, 7    ; y
+    ld e, 4    ; x
+    call UI_PrintStringAtXY
+    
+    ld hl, WarningMsg2
+    ld d, 8    ; y
+    ld e, 4    ; x
+    call UI_PrintStringAtXY
+    
+    ld hl, WarningMsg3
+    ld d, 9    ; y
+    ld e, 4    ; x
+    call UI_PrintStringAtXY
+    
+    ; Instrucción
+    ld hl, WarningPress
+    ld d, 12   ; y
+    ld e, 6    ; x
+    call UI_PrintStringAtXY
+    
+    ; Esperar A
+.wait_a:
+    call ReadJoypad
+    ld a, [JoyState]
+    bit PADB_A, a
+    jr z, .wait_a
+    
+    ; Esperar que se suelte
+.wait_release:
+    call ReadJoypad
+    ld a, [JoyState]
+    bit PADB_A, a
+    jr nz, .wait_release
+    
+    ; Sonido de confirmación
+    call PlayBeepConfirm
+    
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ret
+
+; --- DrawMenu: Dibuja el menú principal ---
+DrawMenu:
+    push af
+    push bc
+    push de
+    push hl
+    
+    ; Limpiar pantalla
+    call UI_ClearScreen
+    
+    ; Dibujar caja principal
+    ld a, 1    ; x
+    ld b, 1    ; y
+    ld c, 18   ; width
+    ld d, 16   ; height
+    call UI_DrawBox
+    
+    ; Título
+    ld hl, MenuTitle
+    ld c, 1    ; box_x
+    ld d, 1    ; box_y
+    ld e, 18   ; box_width
+    call UI_PrintInBox
+    
+    ; Dibujar opciones del menú
+    ld hl, MenuItems
+    ld b, 0    ; contador de items
+    
+.draw_items:
+    push bc
+    push hl
+    
+    ; Calcular posición Y (empezar en línea 4, incrementar de 2 en 2)
+    ld a, b
+    add a      ; *2
+    add 4      ; +4
+    ld d, a    ; D = y
+    
+    ; X fija
+    ld e, 3    ; E = x
+    
+    ; Verificar si es el item seleccionado
+    ld a, [CursorIndex]
+    cp b
+    jr nz, .not_selected
+    
+    ; Dibujar cursor
+    push de
+    dec e      ; Una posición a la izquierda
+    ld a, ">"
+    call UI_PrintAtXY
+    pop de
+    
+.not_selected:
+    ; Dibujar texto del item
+    call UI_PrintStringAtXY
+    
+    pop hl
+    pop bc
+    
+    ; Avanzar al siguiente string
+.find_next:
+    ld a, [hl+]
+    or a
+    jr nz, .find_next
+    
+    ; Incrementar contador
+    inc b
+    ld a, b
+    cp MENU_ITEMS
+    jr c, .draw_items
+    
+    ; Dibujar instrucciones
+    ld hl, MenuInstr
+    ld d, 15   ; y
+    ld e, 2    ; x
+    call UI_PrintStringAtXY
+    
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ret
+
+; --- Agregar estas cadenas a la sección de datos ---
+SECTION "MainData", ROM0
+MenuTitle:      DB "DMG COLD WALLET", 0
+WarningTitle:   DB "ADVERTENCIA", 0
+WarningMsg1:    DB "Esta billetera", 0
+WarningMsg2:    DB "NO usa cifrado", 0
+WarningMsg3:    DB "Solo para DEMO", 0
+WarningPress:   DB "Pulsa A", 0
+MenuInstr:      DB "A:Sel B:Salir", 0
+
+; Los items del menú ya están definidos como Item0, Item1, etc.
+MenuItems:      ; Tabla de punteros (no necesaria si usamos MenuPtrs existente)
