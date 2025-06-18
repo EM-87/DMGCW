@@ -1,7 +1,8 @@
+
 ; debug.asm - Utilidades de depuración para DMG Cold Wallet
 ; Solo se incluyen en compilaciones de debug (cuando DEBUG=1)
-INCLUDE "hardware.inc"
-INCLUDE "../inc/constants.inc"
+INCLUDE "inc/hardware.inc"
+INCLUDE "inc/constants.inc"
 
 IF DEF(DEBUG)
 
@@ -56,17 +57,10 @@ Debug_ClearArea:
     push de
     push hl
     
-    ; Calcular posición en VRAM
-    ld h, 0
-    ld l, DEBUG_Y
-    ld bc, SCRN_VX_B
-    call Multiply      ; HL = DEBUG_Y * SCRN_VX_B
-    
-    ld bc, _SCRN0
-    add hl, bc         ; HL = _SCRN0 + (DEBUG_Y * SCRN_VX_B)
-    
-    ld bc, DEBUG_X
-    add hl, bc         ; HL += DEBUG_X
+    ; Usar UI_GetVRAMPosition de lib/ui.asm
+    ld d, DEBUG_Y
+    ld e, DEBUG_X
+    call UI_GetVRAMPosition
     
     ; Limpiar área de DEBUG_WIDTH x DEBUG_HEIGHT
     ld d, DEBUG_HEIGHT
@@ -105,21 +99,12 @@ Debug_PrintStringAtXY:
     push de
     push hl
     
-    ; Calcular posición en VRAM
-    ld a, d
-    ld b, a
-    ld a, e
-    ld c, a
-    call GetVRAMPosition
-    
-    ; HL = posición en VRAM
-    ; Guardar HL en DE
+    ; Usar UI_GetVRAMPosition para calcular posición
+    push hl         ; Guardar puntero a cadena
+    call UI_GetVRAMPosition
     ld d, h
-    ld e, l
-    
-    ; Recuperar puntero a cadena
-    pop hl
-    push hl
+    ld e, l         ; DE = posición en VRAM
+    pop hl          ; Recuperar puntero a cadena
     
 .loop:
     ; Leer carácter
@@ -161,11 +146,9 @@ Debug_PrintHexByte:
     ld c, a
     
     ; Calcular posición en VRAM
-    ld a, DEBUG_Y
-    ld h, a
-    ld a, DEBUG_X + 10  ; Posición fija después de etiqueta
-    ld l, a
-    call GetVRAMPosition
+    ld d, DEBUG_Y
+    ld e, DEBUG_X + 10  ; Posición fija después de etiqueta
+    call UI_GetVRAMPosition
     
     ; Escribir nibble alto
     ld a, c
@@ -210,6 +193,11 @@ Debug_PrintNumber:
     ; Convertir a decimal (máximo 3 dígitos, 0-255)
     ld b, a
     
+    ; Calcular posición inicial
+    ld d, DEBUG_Y
+    ld e, DEBUG_X + 10
+    call UI_GetVRAMPosition
+    
     ; Centenas
     ld a, b
     ld c, 100
@@ -236,119 +224,169 @@ Debug_PrintNumber:
     ret
     
 .div:
-    ; Divide A/C, guarda el cociente en A y el resto en B
-    ld b, 0
+    ; Divide A/C, devuelve cociente en A y actualiza B con el resto
+    push de
+    ld d, 0         ; Contador del cociente
+    
 .div_loop:
+    ld a, b
     cp c
     jr c, .div_done
+    
     sub c
-    inc b
+    ld b, a         ; B = resto
+    inc d           ; Incrementar cociente
     jr .div_loop
+    
 .div_done:
-    ld a, b
+    ld a, d         ; A = cociente
+    pop de
     ret
 
 ; Debug_PrintRegisters: Imprime los valores de los registros
-; Entrada: Se deben guardar los registros en el stack previamente
+; Nota: Esta función requiere que los registros se guarden en el stack
+; en un orden específico antes de llamarla
 Debug_PrintRegisters:
-    ; Esta función se usa con CALL Debug_PrintRegisters y requiere guardar registros
-    ; en cierto orden antes de llamarla
-    ret
-
-; Debug_GetVRAMPosition: Calcula dirección VRAM para coordenadas X,Y
-; Entrada: H = y, L = x
-; Salida: HL = dirección en VRAM
-GetVRAMPosition:
     push af
     push bc
     push de
+    push hl
     
-    ; Calcular offset: y * 32 + x
+    ; Mostrar AF
+    ld hl, DebugRegAF
+    ld d, DEBUG_Y
+    ld e, DEBUG_X
+    call Debug_PrintStringAtXY
+    
+    pop hl          ; Recuperar HL original
+    push hl         ; Guardarlo de nuevo
     ld a, h
-    ld h, 0
-    ld d, 0
-    ld e, a
+    call Debug_PrintHexByte
+    ld a, l
+    call Debug_PrintHexByte
     
-    ; DE = y
-    ld bc, SCRN_VX_B
-    ; DE * BC = DE * 32
-    call Multiply16  ; HL = y * 32
+    ; Aquí podrías continuar con otros registros...
     
-    ; Añadir X
-    ld b, 0
-    ld c, l
-    add hl, bc
-    
-    ; Añadir base de VRAM
-    ld bc, _SCRN0
-    add hl, bc
-    
+    pop hl
     pop de
     pop bc
     pop af
     ret
 
-; Multiply: Multiplica A por C
-; Entrada: A, C = factores
-; Salida: A = resultado
-Multiply:
-    push bc
-    push de
+; Debug_BreakPoint: Punto de ruptura para depuración
+; Detiene la ejecución hasta que se presione un botón
+Debug_BreakPoint:
+    push af
+    push hl
     
-    ld b, a
-    ld d, 0
-    ld e, 0
+    ; Mostrar mensaje de breakpoint
+    ld hl, DebugBreakMsg
+    ld d, DEBUG_Y
+    ld e, DEBUG_X
+    call Debug_PrintStringAtXY
     
-.multiply_loop:
-    ld a, b
-    or a
-    jr z, .multiply_done
+    ; Esperar botón
+.wait:
+    call ReadJoypad
+    ld a, [JoyState]
+    and $F0         ; Cualquier botón
+    jr z, .wait
     
-    dec b
-    ld a, e
-    add c
-    ld e, a
-    ld a, d
-    adc 0
-    ld d, a
+    ; Esperar que se suelte
+.release:
+    call ReadJoypad
+    ld a, [JoyState]
+    and $F0
+    jr nz, .release
     
-    jr .multiply_loop
+    ; Limpiar mensaje
+    call Debug_ClearArea
     
-.multiply_done:
-    ld a, e
-    
-    pop de
-    pop bc
+    pop hl
+    pop af
     ret
 
-; Multiply16: Multiplica BC por DE
-; Entrada: BC, DE = factores
-; Salida: HL = resultado
-Multiply16:
+; Debug_Assert: Verifica una condición y detiene si falla
+; Entrada: A = valor a verificar (0 = falla)
+;          HL = mensaje de error
+Debug_Assert:
+    or a
+    ret nz          ; Si no es cero, todo bien
+    
+    push hl
+    push de
+    
+    ; Mostrar mensaje de assert
+    ld d, DEBUG_Y
+    ld e, DEBUG_X
+    call Debug_PrintStringAtXY
+    
+    ; Detener ejecución
+.halt:
+    halt
+    jr .halt
+    
+    pop de
+    pop hl
+    ret
+
+; Debug_MemDump: Muestra contenido de memoria
+; Entrada: HL = dirección inicial, B = número de bytes
+Debug_MemDump:
     push af
+    push bc
+    push de
+    push hl
     
-    ld hl, 0
-    ld a, 16
+    ld d, DEBUG_Y
+    ld e, DEBUG_X
     
-.multiply16_loop:
-    add hl, hl
-    rl e
-    rl d
-    jr nc, .skip_add
+.dump_loop:
+    push bc
     
-    add hl, bc
+    ; Mostrar dirección
+    ld a, h
+    call Debug_PrintHexByte
+    ld a, l
+    call Debug_PrintHexByte
     
-.skip_add:
-    dec a
-    jr nz, .multiply16_loop
+    ; Espacio
+    ld a, " "
+    push hl
+    push de
+    call UI_GetVRAMPosition
+    ld a, " "
+    ld [hl], a
+    pop de
+    pop hl
     
+    ; Mostrar valor
+    ld a, [hl+]
+    call Debug_PrintHexByte
+    
+    ; Nueva línea
+    inc d
+    ld e, DEBUG_X
+    
+    pop bc
+    dec b
+    jr nz, .dump_loop
+    
+    pop hl
+    pop de
+    pop bc
     pop af
     ret
 
 ; --- Mensajes de depuración ---
 SECTION "DebugStrings", ROM0
-DebugReadyMsg:    DB "DEBUG READY", 0
+DebugReadyMsg:    DB "DEBUG ON", 0
 DebugValMsg:      DB "VAL: ", 0
-DebugRegMsg:      DB "REG: ", 0
+DebugRegAF:       DB "AF: ", 0
+DebugRegBC:       DB "BC: ", 0
+DebugRegDE:       DB "DE: ", 0
+DebugRegHL:       DB "HL: ", 0
+DebugBreakMsg:    DB "BREAK", 0
+DebugAssertMsg:   DB "ASSERT!", 0
 
 ENDC  ; IF DEF(DEBUG)
