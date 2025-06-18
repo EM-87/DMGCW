@@ -370,3 +370,206 @@ LinkNoiseCount:   DS 1
 LinkTxBuffer:     DS LINK_BUFFER_SIZE
 FrameLength:      DS 1
 FrameCRC:         DS 1
+
+
+
+; Completar las funciones en link.asm
+
+; --- Detection robusta con anti-ruido ---
+LinkDetectConnectionRobust:
+    push bc
+    push de
+    
+    ld b, 3              ; Intentos de detección
+.detectLoop:
+    call LinkSendByte
+    ld a, LINK_MAGIC_REQ
+    call LinkSendByte
+    jr c, .nextTry
+    
+    ld de, TIMEOUT_SHORT
+    call LinkReceiveByteTimeout
+    jr c, .nextTry
+    
+    cp LINK_MAGIC_ACK
+    jr z, .detected
+    
+.nextTry:
+    dec b
+    jr nz, .detectLoop
+    
+    ; No detectado
+    ld a, 1
+    or a                 ; Set NZ
+    jr .done
+    
+.detected:
+    xor a                ; Set Z
+    
+.done:
+    pop de
+    pop bc
+    ret
+
+; --- Handshake con versión ---
+LinkHandshake:
+    push bc
+    
+    ; Enviar versión del protocolo
+    ld a, LINK_PROTO_VERSION
+    call LinkSendByte
+    jr c, .error
+    
+    ; Esperar confirmación de versión
+    ld de, TIMEOUT_SHORT
+    call LinkReceiveByteTimeout
+    jr c, .error
+    
+    cp LINK_VERSION_ACK
+    jr nz, .error
+    
+    ; Handshake exitoso
+    xor a
+    jr .done
+    
+.error:
+    ld a, 1
+    or a
+    
+.done:
+    pop bc
+    ret
+
+; --- Transmisión verificada de transacción ---
+LinkTransmitTransactionVerified:
+    push bc
+    push de
+    push hl
+    
+    ; Construir payload
+    call BuildTransactionPayload
+    jr c, .error
+    
+    ; Enviar frame con CRC
+    ld hl, LinkTxBuffer
+    call StringLength
+    ld b, a              ; B = longitud
+    ld hl, LinkTxBuffer
+    call LinkSendFrameWithCRC
+    or a
+    jr nz, .error
+    
+    ; Esperar verificación
+    ld de, TIMEOUT_VERIFY
+    call LinkReceiveByteTimeout
+    jr c, .error
+    
+    cp LINK_VERIFY_REQ
+    jr nz, .error
+    
+    ; Enviar ACK de verificación
+    ld a, LINK_VERIFY_ACK
+    call LinkSendByte
+    jr c, .error
+    
+    ; Éxito
+    xor a
+    jr .done
+    
+.error:
+    ld a, LINK_ERR_TIMEOUT
+    
+.done:
+    pop hl
+    pop de
+    pop bc
+    ret
+
+; --- UI Functions ---
+DrawLinkScreen:
+    call UI_ClearScreen
+    
+    ; Título
+    ld hl, LinkTitle
+    ld c, 1
+    ld d, 1
+    ld e, 18
+    call UI_PrintInBox
+    
+    ; Estado
+    ld hl, LinkConnecting
+    ld d, 8
+    ld e, 3
+    call UI_PrintStringAtXY
+    
+    ret
+
+ShowConnectionError:
+    ld hl, LinkErrorConn
+    ld d, 10
+    ld e, 3
+    call UI_PrintStringAtXY
+    ret
+
+ShowHandshakeError:
+    ld hl, LinkErrorHand
+    ld d, 10
+    ld e, 3
+    call UI_PrintStringAtXY
+    ret
+
+ShowTransmitError:
+    ld hl, LinkErrorTx
+    ld d, 10
+    ld e, 3
+    call UI_PrintStringAtXY
+    ret
+
+ShowLinkSuccess:
+    ld hl, LinkSuccess
+    ld d, 10
+    ld e, 3
+    call UI_PrintStringAtXY
+    ret
+
+ShowNoDataError:
+    ld hl, LinkNoData
+    ld d, 10
+    ld e, 3
+    call UI_PrintStringAtXY
+    ret
+
+WaitButtonB:
+    push af
+.wait:
+    call ReadJoypad
+    ld a, [JoyState]
+    bit PADB_B, a
+    jr z, .wait
+    
+    ; Esperar release
+.release:
+    call ReadJoypad
+    ld a, [JoyState]
+    bit PADB_B, a
+    jr nz, .release
+    
+    pop af
+    ret
+
+LinkClose:
+    ; Resetear estado del link
+    xor a
+    ld [rSB], a
+    ld [rSC], a
+    ret
+
+; Agregar strings
+SECTION "LinkStrings", ROM1
+LinkTitle:       DB "CABLE LINK", 0
+LinkConnecting:  DB "Conectando...", 0
+LinkErrorConn:   DB "Error conexion", 0
+LinkErrorHand:   DB "Error handshake", 0
+LinkErrorTx:     DB "Error envio", 0
+LinkSuccess:     DB "Enviado OK!", 0
+LinkNoData:      DB "Sin datos", 0
