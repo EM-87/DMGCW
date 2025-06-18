@@ -1,7 +1,7 @@
-; link.asm v6 - Comunicación por cable Link para DMG Cold Wallet
+; link.asm v7 - Comunicación por cable Link para DMG Cold Wallet
 ; Protocolo robusto con CRC-8, verificación bidireccional y anti-ruido
-INCLUDE "hardware.inc"
-INCLUDE "../inc/constants.inc"
+INCLUDE "inc/hardware.inc"
+INCLUDE "inc/constants.inc"
 
 SECTION "LinkModule", ROM1[$5200]
 
@@ -48,6 +48,7 @@ Entry_LinkTest:
     push bc
     push de
     push hl
+    
     xor a
     ld [LinkState], a
     ld [LinkError], a
@@ -99,6 +100,7 @@ Entry_LinkTest:
 .waitExit:
     call WaitButtonB
     call LinkClose
+    
     pop hl
     pop de
     pop bc
@@ -110,12 +112,15 @@ Entry_LinkTest:
 LinkInitWithFilter:
     push af
     push bc
+    
     xor a
     ld [rSB], a
     ld a, $80
     ld [rSC], a
+    
     ld a, LINK_DELAY_NOISE
     call DelayFrames
+    
     ld b, 3
 .flushLoop:
     ld a, $00
@@ -124,6 +129,7 @@ LinkInitWithFilter:
     call DelayFrames
     dec b
     jr nz, .flushLoop
+    
     pop bc
     pop af
     ret
@@ -144,19 +150,74 @@ LinkSendByteNoWait:
     pop bc
     ret
 
-; --- REFINADO: NO falsa la sesión ante ceros aislados ---
+; --- LinkSendByte con manejo de ruido ---
 LinkSendByte:
     push bc
     push de
+    
     ld e, a               ; byte original
     ld [rSB], a
     ld a, $81
     ld [rSC], a
+    
     ld bc, TIMEOUT_SHORT
+.waitLoop:
+    ld a, [rSC]
+    bit 7, a
+    jr z, .done
+    dec bc
+    ld a, b
+    or c
+    jr nz, .waitLoop
+    scf
+    jr .exit
 
-; Agregar en link.asm después de LinkSendByte
+.done:
+    ld a, [rSB]
+    cp $FF
+    jr z, .checkFF
+    cp $00
+    jr z, .checkZero
+    or a
+    jr .exit
 
-; LinkReceiveByte: Recibe un byte por cable link
+.checkFF:
+    ld a, e
+    cp $FF
+    jr z, .valid
+    ld hl, LinkNoiseCount
+    inc [hl]
+    scf
+    jr .exit
+
+.checkZero:
+    ld a, e
+    or a
+    jr z, .valid
+    ld hl, LinkNoiseCount
+    inc [hl]
+    ld a, [LinkNoiseCount]
+    cp LINK_NOISE_THRESHOLD
+    jr nc, .tooMuchNoise
+    xor a
+    jr .exit
+
+.tooMuchNoise:
+    scf
+
+.valid:
+    xor a
+
+.exit:
+    push af
+    ld a, LINK_DELAY_BYTE
+    call DelayFrames
+    pop af
+    pop de
+    pop bc
+    ret
+
+; --- LinkReceiveByte: Recibe un byte por cable link ---
 ; Salida: A = byte recibido, Carry = 1 si timeout
 LinkReceiveByte:
     push bc
@@ -191,75 +252,46 @@ LinkReceiveByte:
     pop bc
     ret
 
-.waitLoop:
-    ld a, [rSC]
-    bit 7, a
-    jr z, .done
-    dec bc
-    ld a, b
-    or c
-    jr nz, .waitLoop
-    scf
-    jr .exit
-
-.done:
-    ld a, [rSB]
-    cp $FF
-    jr z, .checkFF
-    cp $00
-    jr z, .checkZero
-    or a
-    jr .exit
-
-.checkFF:
-    ld a, e
-    cp $FF
-    jr z, .valid
-    inc [LinkNoiseCount]
-    scf
-    jr .exit
-
-.checkZero:
-    ld a, e
-    or a
-    jr z, .valid
-    inc [LinkNoiseCount]
-    ld a, [LinkNoiseCount]
-    cp LINK_NOISE_THRESHOLD
-    jr nc, .tooMuchNoise
-    xor a
-    jr .exit
-
-.tooMuchNoise:
-    scf
-
-.valid:
-    xor a
-
-.exit:
-    push af
-    ld a, LINK_DELAY_BYTE
-    call DelayFrames
-    pop af
-    pop de
-    pop bc
-    ret
-
-; (LinkReceiveByteTimeout preserva BC y HL, DE consumido tal cual)
+; --- LinkReceiveByteTimeout con timeout específico ---
 LinkReceiveByteTimeout:
     push bc
     push hl
-    ; ... mismo código de v6 ...
+    
+    ; DE contiene el timeout
+    xor a
+    ld [rSB], a
+    ld a, $80
+    ld [rSC], a
+    
+.waitRT:
+    ld a, [rSC]
+    bit 7, a
+    jr z, .doneRT
+    
+    dec de
+    ld a, d
+    or e
+    jr nz, .waitRT
+    
+    ; Timeout
+    scf
+    jr .exitRT
+    
+.doneRT:
+    ld a, [rSB]
+    or a                ; Clear carry
+    
 .exitRT:
     pop hl
     pop bc
     ret
 
-; --- FRAME send con CRC-8 y reset inteligente ---
+; --- FRAME send con CRC-8 correcto ---
 LinkSendFrameWithCRC:
     push bc
     push de
     push hl
+    
     ld a, b
     cp LINK_MAX_PAYLOAD
     jr c, .lenOK
@@ -275,9 +307,11 @@ LinkSendFrameWithCRC:
     ld [FrameCRC], a
     pop hl
     pop bc
+    
     ld a, LINK_START_BYTE
     call LinkSendByte
     jr c, .sendError
+    
     ld a, [FrameLength]
     call LinkSendByte
     jr c, .sendError
@@ -296,13 +330,16 @@ LinkSendFrameWithCRC:
     ld a, [FrameCRC]
     call LinkSendByte
     jr c, .sendError
+    
     ld a, LINK_END_BYTE
     call LinkSendByte
     jr c, .sendError
+    
     call LinkReceiveByte
     jr c, .sendError
     cp LINK_FRAME_ACK
     jr z, .successLF
+    
     ld a, LINK_ERR_CHECKSUM
     jr .exitLF
 
@@ -312,7 +349,7 @@ LinkSendFrameWithCRC:
     jr .exitLF
 
 .sendError:
-    ld a, LINK_ERR_TIMEOUT  ; Mantener historial de ruido
+    ld a, LINK_ERR_TIMEOUT
 
 .exitLF:
     pop hl
@@ -320,35 +357,82 @@ LinkSendFrameWithCRC:
     pop bc
     ret
 
-; --- Payload builder usa la constante global ---
+; --- CRC-8 con polinomio 0x07 (correcto) ---
+CalculateCRC8:
+    push bc
+    push de
+    push hl
+    
+    ld c, $00       ; CRC inicial = 0
+    
+.byteLoop:
+    ld a, b
+    or a
+    jr z, .done
+    
+    ld a, [hl+]     ; Leer byte de datos
+    xor c           ; XOR con CRC actual
+    ld c, a
+    
+    ld d, 8         ; 8 bits por procesar
+.bitLoop:
+    sla c           ; Shift left, MSB -> Carry
+    jr nc, .noXor
+    
+    ld a, c
+    xor $07         ; Polinomio CRC-8
+    ld c, a
+    
+.noXor:
+    dec d
+    jr nz, .bitLoop
+    
+    dec b
+    jr .byteLoop
+    
+.done:
+    ld a, c         ; Resultado en A
+    
+    pop hl
+    pop de
+    pop bc
+    ret
+
+; --- Payload builder corregido ---
 BuildTransactionPayload:
     push bc
     push de
     push hl
+    
     ld hl, LinkTxBuffer
     ld de, hl
     ld hl, AddressBuf
     ld bc, WALLET_ADDR_LEN
     call CopyStringWithLimit
+    
     push de
     ld hl, LinkTxBuffer
     call StringLength
     ld b, a
     pop de
+    
     ld a, LINK_MAX_PAYLOAD
     sub b
     cp MINIMUM_AMOUNT_SPACE
     jr c, .overflowBP
+    
     ld a, '|'
     ld [de], a
     inc de
+    
     ld hl, AmountBuf
     ld a, LINK_MAX_PAYLOAD
     sub b
     sub LINK_SEPARATOR_SIZE
     ld c, a
-    xor b
+    ld b, 0              ; CORRECCIÓN: ld b, 0 en lugar de xor b
     call CopyStringWithLimit
+    
     ld hl, LinkTxBuffer
     call StringLength
     cp LINK_MAX_PAYLOAD
@@ -368,50 +452,6 @@ BuildTransactionPayload:
     pop bc
     ret
 
-; --- CRC-8 refinado ---
-CalculateCRC8:
-    push bc
-    push de
-    push hl
-    ld e, $00
-.byteLoop:
-    ld a, b
-    or a
-    jr z, .doneCRC
-    ld a, [hl+]
-    xor e
-    ld d, 8
-.bitLoop:
-    add a, a
-    jr nc, .noX
-    xor $07
-.noX:
-    dec d
-    jr nz, .bitLoop
-    ld e, a
-    dec b
-    jr .byteLoop
-.doneCRC:
-    ld a, e
-    pop hl
-    pop de
-    pop bc
-    ret
-
-; --- Conclusión de funciones y UI (idénticas a v5/v6) ---
-
-SECTION "LinkVars", WRAM0[$CD00]
-LinkState:        DS 1
-LinkError:        DS 1
-LinkNoiseCount:   DS 1
-LinkTxBuffer:     DS LINK_BUFFER_SIZE
-FrameLength:      DS 1
-FrameCRC:         DS 1
-
-
-
-; Completar las funciones en link.asm
-
 ; --- Detection robusta con anti-ruido ---
 LinkDetectConnectionRobust:
     push bc
@@ -419,7 +459,6 @@ LinkDetectConnectionRobust:
     
     ld b, 3              ; Intentos de detección
 .detectLoop:
-    call LinkSendByte
     ld a, LINK_MAGIC_REQ
     call LinkSendByte
     jr c, .nextTry
@@ -526,17 +565,24 @@ LinkTransmitTransactionVerified:
 DrawLinkScreen:
     call UI_ClearScreen
     
+    ; Dibujar caja
+    ld a, 1   ; x
+    ld b, 1   ; y
+    ld c, 18  ; width
+    ld d, 16  ; height
+    call UI_DrawBox
+    
     ; Título
     ld hl, LinkTitle
-    ld c, 1
-    ld d, 1
-    ld e, 18
+    ld c, 1   ; box_x
+    ld d, 1   ; box_y
+    ld e, 18  ; box_width
     call UI_PrintInBox
     
     ; Estado
     ld hl, LinkConnecting
-    ld d, 8
-    ld e, 3
+    ld d, 8   ; y
+    ld e, 3   ; x
     call UI_PrintStringAtXY
     
     ret
@@ -591,6 +637,9 @@ WaitButtonB:
     bit PADB_B, a
     jr nz, .release
     
+    ; Sonido
+    call PlayBeepNav
+    
     pop af
     ret
 
@@ -601,7 +650,7 @@ LinkClose:
     ld [rSC], a
     ret
 
-; Agregar strings
+; --- Strings ---
 SECTION "LinkStrings", ROM1
 LinkTitle:       DB "CABLE LINK", 0
 LinkConnecting:  DB "Conectando...", 0
@@ -610,3 +659,12 @@ LinkErrorHand:   DB "Error handshake", 0
 LinkErrorTx:     DB "Error envio", 0
 LinkSuccess:     DB "Enviado OK!", 0
 LinkNoData:      DB "Sin datos", 0
+
+; --- Variables ---
+SECTION "LinkVars", WRAM0[$CD00]
+LinkState:        DS 1
+LinkError:        DS 1
+LinkNoiseCount:   DS 1
+LinkTxBuffer:     DS LINK_BUFFER_SIZE
+FrameLength:      DS 1
+FrameCRC:         DS 1
