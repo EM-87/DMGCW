@@ -294,3 +294,15 @@ CompareMemory:
 ; --- Variables ---
 SECTION "Utils_Vars", WRAM0[$CD00]
 HexBuffer:    DS 3   ; Buffer para conversión a hex (2 caracteres + null)
+
+; ReadJoypad ya está definida en main.asm, moverla aquí si prefieres
+
+; WaitVBlank - versión mejorada
+WaitVBlank:
+    push af
+.wait:
+    ld a, [rLY]
+    cp 144
+    jr c, .wait
+    pop af
+    ret
