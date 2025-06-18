@@ -154,6 +154,43 @@ LinkSendByte:
     ld [rSC], a
     ld bc, TIMEOUT_SHORT
 
+; Agregar en link.asm después de LinkSendByte
+
+; LinkReceiveByte: Recibe un byte por cable link
+; Salida: A = byte recibido, Carry = 1 si timeout
+LinkReceiveByte:
+    push bc
+    
+    ; Preparar para recibir
+    xor a
+    ld [rSB], a
+    ld a, $80           ; Modo esclavo
+    ld [rSC], a
+    
+    ; Esperar transferencia con timeout
+    ld bc, TIMEOUT_SHORT
+.wait:
+    ld a, [rSC]
+    bit 7, a
+    jr z, .done         ; Transferencia completa
+    
+    dec bc
+    ld a, b
+    or c
+    jr nz, .wait
+    
+    ; Timeout
+    scf                 ; Set carry
+    jr .exit
+    
+.done:
+    ld a, [rSB]         ; Leer byte recibido
+    or a                ; Clear carry
+    
+.exit:
+    pop bc
+    ret
+
 .waitLoop:
     ld a, [rSC]
     bit 7, a
