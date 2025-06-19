@@ -1,5 +1,6 @@
-; link.asm v7 - Comunicación por cable Link para DMG Cold Wallet
-; Protocolo robusto con CRC-8, verificación bidireccional y anti-ruido
+; ====================================================================
+; Archivo: src/link.asm - VERSIÓN DECONSENSO COMPLETA
+; ====================================================================
 INCLUDE "inc/hardware.inc"
 INCLUDE "inc/constants.inc"
 
@@ -98,7 +99,10 @@ Entry_LinkTest:
     call ShowNoDataError
 
 .waitExit:
-    call WaitButtonB
+    ; Espera al botón B usando la rutina genérica
+    ld a, PADB_B
+    call WaitButton
+
     call LinkClose
     
     pop hl
@@ -108,7 +112,6 @@ Entry_LinkTest:
     ret
 
 ; --- Low-level with noise filtering ---
-
 LinkInitWithFilter:
     push af
     push bc
@@ -218,36 +221,29 @@ LinkSendByte:
     ret
 
 ; --- LinkReceiveByte: Recibe un byte por cable link ---
-; Salida: A = byte recibido, Carry = 1 si timeout
 LinkReceiveByte:
     push bc
     
-    ; Preparar para recibir
     xor a
     ld [rSB], a
-    ld a, $80           ; Modo esclavo
+    ld a, $80
     ld [rSC], a
     
-    ; Esperar transferencia con timeout
     ld bc, TIMEOUT_SHORT
 .wait:
     ld a, [rSC]
     bit 7, a
-    jr z, .done         ; Transferencia completa
-    
+    jr z, .done
     dec bc
     ld a, b
     or c
     jr nz, .wait
-    
-    ; Timeout
-    scf                 ; Set carry
+    scf
     jr .exit
-    
+
 .done:
-    ld a, [rSB]         ; Leer byte recibido
-    or a                ; Clear carry
-    
+    ld a, [rSB]
+    or a
 .exit:
     pop bc
     ret
@@ -257,7 +253,6 @@ LinkReceiveByteTimeout:
     push bc
     push hl
     
-    ; DE contiene el timeout
     xor a
     ld [rSB], a
     ld a, $80
@@ -267,26 +262,22 @@ LinkReceiveByteTimeout:
     ld a, [rSC]
     bit 7, a
     jr z, .doneRT
-    
     dec de
     ld a, d
     or e
     jr nz, .waitRT
-    
-    ; Timeout
     scf
     jr .exitRT
-    
+
 .doneRT:
     ld a, [rSB]
-    or a                ; Clear carry
-    
+    or a
 .exitRT:
     pop hl
     pop bc
     ret
 
-; --- FRAME send con CRC-8 correcto ---
+; --- LinkSendFrameWithCRC: Envía un frame con CRC-8 ---
 LinkSendFrameWithCRC:
     push bc
     push de
@@ -307,11 +298,11 @@ LinkSendFrameWithCRC:
     ld [FrameCRC], a
     pop hl
     pop bc
-    
+
     ld a, LINK_START_BYTE
     call LinkSendByte
     jr c, .sendError
-    
+
     ld a, [FrameLength]
     call LinkSendByte
     jr c, .sendError
@@ -330,22 +321,22 @@ LinkSendFrameWithCRC:
     ld a, [FrameCRC]
     call LinkSendByte
     jr c, .sendError
-    
+
     ld a, LINK_END_BYTE
     call LinkSendByte
     jr c, .sendError
-    
+
     call LinkReceiveByte
     jr c, .sendError
     cp LINK_FRAME_ACK
     jr z, .successLF
-    
+
     ld a, LINK_ERR_CHECKSUM
     jr .exitLF
 
 .successLF:
     xor a
-    ld [LinkNoiseCount], a  ; Reset tras OK
+    ld [LinkNoiseCount], a
     jr .exitLF
 
 .sendError:
@@ -357,48 +348,45 @@ LinkSendFrameWithCRC:
     pop bc
     ret
 
-; --- CRC-8 con polinomio 0x07 (correcto) ---
+; --- CalculateCRC8: CRC-8 con polinomio 0x07 ---
 CalculateCRC8:
     push bc
     push de
     push hl
     
-    ld c, $00       ; CRC inicial = 0
-    
+    ld c, $00
+
 .byteLoop:
     ld a, b
     or a
     jr z, .done
-    
-    ld a, [hl+]     ; Leer byte de datos
-    xor c           ; XOR con CRC actual
+
+    ld a, [hl+]
+    xor c
     ld c, a
-    
-    ld d, 8         ; 8 bits por procesar
+
+    ld d, 8
 .bitLoop:
-    sla c           ; Shift left, MSB -> Carry
+    sla c
     jr nc, .noXor
-    
     ld a, c
-    xor $07         ; Polinomio CRC-8
+    xor $07
     ld c, a
-    
 .noXor:
     dec d
     jr nz, .bitLoop
-    
     dec b
     jr .byteLoop
-    
+
 .done:
-    ld a, c         ; Resultado en A
-    
+    ld a, c
+
     pop hl
     pop de
     pop bc
     ret
 
-; --- Payload builder corregido ---
+; --- BuildTransactionPayload: Construye payload de transacción ---
 BuildTransactionPayload:
     push bc
     push de
@@ -408,31 +396,31 @@ BuildTransactionPayload:
     ld de, hl
     ld hl, AddressBuf
     ld bc, WALLET_ADDR_LEN
-    call CopyStringWithLimit
+    call CopyString
     
     push de
     ld hl, LinkTxBuffer
     call StringLength
     ld b, a
     pop de
-    
+
     ld a, LINK_MAX_PAYLOAD
     sub b
     cp MINIMUM_AMOUNT_SPACE
     jr c, .overflowBP
-    
+
     ld a, '|'
     ld [de], a
     inc de
-    
+
     ld hl, AmountBuf
     ld a, LINK_MAX_PAYLOAD
     sub b
     sub LINK_SEPARATOR_SIZE
     ld c, a
-    ld b, 0              ; CORRECCIÓN: ld b, 0 en lugar de xor b
-    call CopyStringWithLimit
-    
+    ld b, 0
+    call CopyString
+
     ld hl, LinkTxBuffer
     call StringLength
     cp LINK_MAX_PAYLOAD
@@ -445,117 +433,105 @@ BuildTransactionPayload:
 
 .successBP:
     xor a
-
 .endBP:
     pop hl
     pop de
     pop bc
     ret
 
-; --- Detection robusta con anti-ruido ---
+; --- LinkDetectConnectionRobust: Detección robusta con anti-ruido ---
 LinkDetectConnectionRobust:
     push bc
     push de
     
-    ld b, 3              ; Intentos de detección
+    ld b, 3
 .detectLoop:
     ld a, LINK_MAGIC_REQ
     call LinkSendByte
     jr c, .nextTry
-    
+
     ld de, TIMEOUT_SHORT
     call LinkReceiveByteTimeout
     jr c, .nextTry
-    
+
     cp LINK_MAGIC_ACK
     jr z, .detected
-    
+
 .nextTry:
     dec b
     jr nz, .detectLoop
-    
-    ; No detectado
+
     ld a, 1
-    or a                 ; Set NZ
+    or a
     jr .done
-    
+
 .detected:
-    xor a                ; Set Z
-    
+    xor a
 .done:
     pop de
     pop bc
     ret
 
-; --- Handshake con versión ---
+; --- LinkHandshake: Handshake con versión del protocolo ---
 LinkHandshake:
     push bc
     
-    ; Enviar versión del protocolo
     ld a, LINK_PROTO_VERSION
     call LinkSendByte
     jr c, .error
-    
-    ; Esperar confirmación de versión
+
     ld de, TIMEOUT_SHORT
     call LinkReceiveByteTimeout
     jr c, .error
-    
+
     cp LINK_VERSION_ACK
     jr nz, .error
-    
-    ; Handshake exitoso
+
     xor a
     jr .done
-    
+
 .error:
     ld a, 1
     or a
-    
 .done:
     pop bc
     ret
 
-; --- Transmisión verificada de transacción ---
+; --- LinkTransmitTransactionVerified: Envía transacción y verifica ACK ---
 LinkTransmitTransactionVerified:
     push bc
     push de
     push hl
     
-    ; Construir payload
     call BuildTransactionPayload
-    jr c, .error
-    
-    ; Enviar frame con CRC
+    or a
+    jr nz, .errorTP
+
     ld hl, LinkTxBuffer
     call StringLength
-    ld b, a              ; B = longitud
+    ld b, a
     ld hl, LinkTxBuffer
     call LinkSendFrameWithCRC
     or a
-    jr nz, .error
-    
-    ; Esperar verificación
+    jr nz, .errorTP
+
     ld de, TIMEOUT_VERIFY
     call LinkReceiveByteTimeout
-    jr c, .error
-    
+    jr c, .errorTP
+
     cp LINK_VERIFY_REQ
-    jr nz, .error
-    
-    ; Enviar ACK de verificación
+    jr nz, .errorTP
+
     ld a, LINK_VERIFY_ACK
     call LinkSendByte
-    jr c, .error
-    
-    ; Éxito
+    jr c, .errorTP
+
     xor a
-    jr .done
-    
-.error:
+    jr .doneTP
+
+.errorTP:
     ld a, LINK_ERR_TIMEOUT
-    
-.done:
+.doneTP:
     pop hl
     pop de
     pop bc
@@ -565,26 +541,22 @@ LinkTransmitTransactionVerified:
 DrawLinkScreen:
     call UI_ClearScreen
     
-    ; Dibujar caja
-    ld a, 1   ; x
-    ld b, 1   ; y
-    ld c, 18  ; width
-    ld d, 16  ; height
+    ld a, 1
+    ld b, 1
+    ld c, 18
+    ld d, 16
     call UI_DrawBox
     
-    ; Título
     ld hl, LinkTitle
-    ld c, 1   ; box_x
-    ld d, 1   ; box_y
-    ld e, 18  ; box_width
+    ld c, 1
+    ld d, 1
+    ld e, 18
     call UI_PrintInBox
     
-    ; Estado
     ld hl, LinkConnecting
-    ld d, 8   ; y
-    ld e, 3   ; x
+    ld d, 8
+    ld e, 3
     call UI_PrintStringAtXY
-    
     ret
 
 ShowConnectionError:
@@ -622,35 +594,14 @@ ShowNoDataError:
     call UI_PrintStringAtXY
     ret
 
-WaitButtonB:
-    push af
-.wait:
-    call ReadJoypad
-    ld a, [JoyState]
-    bit PADB_B, a
-    jr z, .wait
-    
-    ; Esperar release
-.release:
-    call ReadJoypad
-    ld a, [JoyState]
-    bit PADB_B, a
-    jr nz, .release
-    
-    ; Sonido
-    call PlayBeepNav
-    
-    pop af
-    ret
-
+; --- LinkClose: Cierra el link cable ---
 LinkClose:
-    ; Resetear estado del link
     xor a
     ld [rSB], a
     ld [rSC], a
     ret
 
-; --- Strings ---
+; --- Constantes y strings en ROM1 ---
 SECTION "LinkStrings", ROM1
 LinkTitle:       DB "CABLE LINK", 0
 LinkConnecting:  DB "Conectando...", 0
@@ -660,7 +611,7 @@ LinkErrorTx:     DB "Error envio", 0
 LinkSuccess:     DB "Enviado OK!", 0
 LinkNoData:      DB "Sin datos", 0
 
-; --- Variables ---
+; --- Variables en WRAM0 ---
 SECTION "LinkVars", WRAM0[$CD00]
 LinkState:        DS 1
 LinkError:        DS 1
