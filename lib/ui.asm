@@ -266,13 +266,10 @@ UI_ClearLine:
 ; UI_WaitVBlank: Espera a que ocurra una interrupción VBlank
 UI_WaitVBlank:
     push af
-    
 .wait:
-    ; Leer registro STAT
-    ld a, [rSTAT]
-    and STATF_BUSY    ; Comprobar si LCD está ocupado
-    jr nz, .wait      ; Si está ocupado, seguir esperando
-    
+    ld a, [rLY]
+    cp 144
+    jr c, .wait
     pop af
     ret
 
