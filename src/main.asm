@@ -27,7 +27,7 @@ Start:
     di                  ; Deshabilitar interrupciones
     
     ; Inicializar stack
-    ld sp, $FFFE
+    ld sp, $DFFF
     
     ; Inicializar variables
     xor a
