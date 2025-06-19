@@ -1,33 +1,27 @@
-; utils.asm - Utilidades generales para DMG Cold Wallet
+; ====================================================================
+; Archivo: src/utils.asm - VERSIÓN FINAL Y CORREGIDA
+; ====================================================================
 INCLUDE "hardware.inc"
-INCLUDE "../inc/constants.inc"
+INCLUDE "inc/constants.inc"
 
 ; --- Funciones de manejo de memoria ---
 
 ; CopyMemory: Copia BC bytes desde HL a DE
 CopyMemory:
-    ; Preservar registros
     push af
     push bc
     push de
     push hl
-    
-.loop:
-    ; Verificar si quedan bytes por copiar
+.loopCM:
     ld a, b
     or c
-    jr z, .done
-    
-    ; Copiar byte
+    jr z, .doneCM
     ld a, [hl+]
     ld [de], a
     inc de
-    
-    ; Decrementar contador
     dec bc
-    jr .loop
-    
-.done:
+    jr .loopCM
+.doneCM:
     pop hl
     pop de
     pop bc
@@ -36,279 +30,59 @@ CopyMemory:
 
 ; FillMemory: Llena BC bytes en HL con valor en A
 FillMemory:
-    ; Preservar registros
+    push af          ; Preservar A, que contiene el valor de relleno
     push bc
     push de
     push hl
     
-.loop:
-    ; Verificar si quedan bytes por llenar
-    ld a, b
+    ld d, a          ; Guardar el valor de relleno en D para no perderlo
+.loopFM:
+    ld a, b          ; Usar A temporalmente para comprobar el contador BC
     or c
-    jr z, .done
-    
-    ; Llenar byte
+    jr z, .doneFM
+    ld a, d          ; Recuperar el valor de relleno desde D
     ld [hl+], a
-    
-    ; Decrementar contador
     dec bc
-    jr .loop
-    
-.done:
+    jr .loopFM
+.doneFM:
     pop hl
     pop de
     pop bc
+    pop af           ; Restaurar el valor original de A
     ret
 
-; CopyString: Copia cadena terminada en 0 de HL a DE
-; Se detiene al encontrar terminador o después de BC bytes
+; CopyString: Copia cadena terminada en 0 de HL a DE (máx. BC bytes)
+; Garantiza un terminador nulo al final.
 CopyString:
-    ; Preservar registros
     push af
     push bc
     push de
     push hl
-    
-.loop:
-    ; Verificar si quedan bytes por copiar en límite
+.loopCS:
     ld a, b
     or c
-    jr z, .limit_reached
-    
-    ; Leer byte
-    ld a, [hl]
-    
-    ; Verificar terminador
-    or a
-    jr z, .done
-    
-    ; Copiar byte
-    ld [de], a
-    
-    ; Avanzar punteros
-    inc hl
-    inc de
-    
-    ; Decrementar contador
-    dec bc
-    jr .loop
-    
+    jr z, .limit_reached  ; Límite de bytes alcanzado
+
+    ld a, [hl+]           ; Leer carácter y avanzar puntero origen
+    ld [de], a            ; Escribir carácter
+    inc de                ; Avanzar puntero destino
+    dec bc                ; Decrementar contador de límite
+
+    or a                  ; Comprobar si el carácter era el terminador (0)
+    jr nz, .loopCS        ; Si no, repetir el bucle
+    jr .doneCS            ; Si sí, la copia está completa y terminada
+
 .limit_reached:
-    ; Asegurar terminador después del límite
-    xor a
-    ld [de], a
-    
-.done:
-    ; Asegurar terminador
-    xor a
-    ld [de], a
-    
+    dec de                ; Retroceder para sobrescribir el último carácter copiado
+    xor a                 ; a = 0
+    ld [de], a            ; Forzar el terminador nulo
+
+.doneCS:
     pop hl
     pop de
     pop bc
     pop af
     ret
-
-; --- Funciones de conversión ---
-
-; ByteToHex: Convierte byte en A a representación hexadecimal
-; Entrada: A = byte a convertir
-; Salida: HL = puntero a buffer con string hex + terminador
-ByteToHex:
-    ; Preservar registros
-    push af
-    push bc
-    push de
-    
-    ; Guardar valor original
-    ld b, a
-    
-    ; Convertir nibble alto
-    srl a
-    srl a
-    srl a
-    srl a
-    call .NibbleToChar
-    ld [HexBuffer], a
-    
-    ; Convertir nibble bajo
-    ld a, b
-    and $0F
-    call .NibbleToChar
-    ld [HexBuffer+1], a
-    
-    ; Agregar terminador
-    xor a
-    ld [HexBuffer+2], a
-    
-    ; Devolver puntero a buffer
-    ld hl, HexBuffer
-    
-    pop de
-    pop bc
-    pop af
-    ret
-    
-.NibbleToChar:
-    ; Convierte un valor 0-15 a carácter hexadecimal
-    cp 10
-    jr c, .Digit
-    
-    ; Es A-F
-    add "A" - 10
-    ret
-    
-.Digit:
-    ; Es 0-9
-    add "0"
-    ret
-
-; --- Funciones matemáticas ---
-
-; Multiply: Multiplica HL por BC
-; Entrada: HL, BC = operandos
-; Salida: HL = HL * BC
-Multiply:
-    ; Si alguno es cero, resultado es cero
-    ld a, h
-    or l
-    jr z, .zero
-    
-    ld a, b
-    or c
-    jr z, .zero
-    
-    ; Guardar valor original de HL
-    push de
-    ld d, h
-    ld e, l
-    
-    ; Inicializar resultado
-    ld hl, 0
-    
-.loop:
-    ; Sumar HL += DE
-    add hl, de
-    
-    ; Decrementar contador
-    dec bc
-    
-    ; Verificar si terminamos
-    ld a, b
-    or c
-    jr nz, .loop
-    
-    pop de
-    ret
-    
-.zero:
-    ; Resultado es cero
-    ld hl, 0
-    ret
-
-; --- Funciones de comparación ---
-
-; CompareString: Compara dos cadenas terminadas en 0
-; Entrada: HL, DE = punteros a cadenas
-; Salida: Z=1 si iguales, Z=0 si diferentes
-;         C=1 si HL < DE, C=0 si HL >= DE
-CompareString:
-    ; Preservar registros
-    push hl
-    push de
-    
-.loop:
-    ; Leer bytes
-    ld a, [de]
-    ld b, [hl]
-    
-    ; Comparar
-    cp b
-    jr nz, .different
-    
-    ; Si ambos son terminadores, cadenas iguales
-    or a
-    jr z, .equal
-    
-    ; Avanzar punteros
-    inc hl
-    inc de
-    jr .loop
-    
-.different:
-    ; Restaurar registros con flags intactos
-    pop de
-    pop hl
-    ret
-    
-.equal:
-    ; Restaurar registros con Z=1
-    pop de
-    pop hl
-    xor a  ; Asegurar Z=1
-    ret
-
-; CompareMemory: Compara dos bloques de memoria
-; Entrada: HL, DE = punteros a bloques, BC = tamaño
-; Salida: Z=1 si iguales, Z=0 si diferentes
-CompareMemory:
-    ; Preservar registros
-    push hl
-    push de
-    push bc
-    
-.loop:
-    ; Verificar si queda por comparar
-    ld a, b
-    or c
-    jr z, .equal
-    
-    ; Leer bytes
-    ld a, [de]
-    cp [hl]
-    jr nz, .different
-    
-    ; Avanzar punteros
-    inc hl
-    inc de
-    
-    ; Decrementar contador
-    dec bc
-    jr .loop
-    
-.different:
-    ; Restaurar registros con flags intactos (Z=0)
-    pop bc
-    pop de
-    pop hl
-    ret
-    
-.equal:
-    ; Restaurar registros con Z=1
-    pop bc
-    pop de
-    pop hl
-    xor a  ; Asegurar Z=1
-    ret
-
-; --- Variables ---
-SECTION "Utils_Vars", WRAM0[$CD00]
-HexBuffer:    DS 3   ; Buffer para conversión a hex (2 caracteres + null)
-
-; ReadJoypad ya está definida en main.asm, moverla aquí si prefieres
-
-; WaitVBlank - versión mejorada
-WaitVBlank:
-    push af
-.wait:
-    ld a, [rLY]
-    cp 144
-    jr c, .wait
-    pop af
-    ret
-
-
-; Agregar a utils.asm
 
 ; StringLength: Calcula la longitud de una cadena terminada en 0
 ; Entrada: HL = puntero a cadena
@@ -318,18 +92,42 @@ StringLength:
     push hl
     
     ld b, 0
-.loop:
+.loopSL:
     ld a, [hl+]
     or a
-    jr z, .done
+    jr z, .doneSL
     inc b
-    jr .loop
+    jr .loopSL
     
-.done:
+.doneSL:
     ld a, b
     
     pop hl
     pop bc
+    ret
+
+; --- Rutinas de I/O y temporización ---
+
+; WaitButton: Espera pulsación y liberación de un botón.
+; Entrada: A = máscara del botón (ej. PADB_B)
+WaitButton:
+    push af               ; Preservar flags y la máscara de botón
+    push bc
+    ld b, a               ; Guardar la máscara en B para no perderla
+.wait:
+    call ReadJoypad       ; Leer estado actual de los botones
+    ld a, [JoyState]
+    and b                 ; Aislar el botón que nos interesa
+    jr z, .wait           ; Si es cero, no está presionado. Esperar.
+.release:
+    call ReadJoypad       ; El botón está presionado, ahora esperar a que se suelte
+    ld a, [JoyState]
+    and b
+    jr nz, .release       ; Si no es cero, sigue presionado. Esperar.
+    
+    call PlayBeepNav      ; Dar feedback al usuario una vez se ha soltado el botón
+    pop bc
+    pop af
     ret
 
 ; DelayFrames: Espera A frames
@@ -338,47 +136,26 @@ DelayFrames:
     push bc
     
     ld b, a
-.loop:
+.loopDF:
     push bc
     call WaitVBlank
     pop bc
     dec b
-    jr nz, .loop
+    jr nz, .loopDF
     
     pop bc
     ret
-
-; CopyStringWithLimit: Copia cadena con límite
-; Entrada: HL = origen, DE = destino, BC = límite máximo
-; Salida: DE apunta al byte después del último copiado
-CopyStringWithLimit:
+    
+; WaitVBlank: Espera al inicio del VBlank
+WaitVBlank:
     push af
-    
-.loop:
-    ; Verificar límite
-    ld a, b
-    or c
-    jr z, .limit_reached
-    
-    ; Copiar carácter
-    ld a, [hl+]
-    ld [de], a
-    
-    ; Verificar si es terminador
-    or a
-    jr z, .done
-    
-    ; Siguiente carácter
-    inc de
-    dec bc
-    jr .loop
-    
-.limit_reached:
-    ; Forzar terminador
-    xor a
-    ld [de], a
-    inc de
-    
-.done:
+.waitVB:
+    ld a, [rLY]
+    cp 144
+    jr c, .waitVB
     pop af
     ret
+
+; --- Variables ---
+SECTION "Utils_Vars", WRAM0[$CD00]
+HexBuffer:    DS 3   ; Buffer para conversión a hex (2 caracteres + null)
