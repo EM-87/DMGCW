@@ -354,33 +354,36 @@ CalculateCRC8:
     push de
     push hl
     
-    ld c, $00
-
+    ld c, $00       ; CRC inicial = 0
+    
 .byteLoop:
     ld a, b
     or a
     jr z, .done
-
-    ld a, [hl+]
-    xor c
+    
+    ld a, [hl+]     ; Leer byte
+    xor c           ; XOR con CRC actual
     ld c, a
-
-    ld d, 8
+    
+    ld d, 8         ; 8 bits
 .bitLoop:
-    sla c
+    sla c           ; Shift left
     jr nc, .noXor
+    
     ld a, c
-    xor $07
+    xor $07         ; Polinomio
     ld c, a
+    
 .noXor:
     dec d
     jr nz, .bitLoop
+    
     dec b
     jr .byteLoop
-
+    
 .done:
-    ld a, c
-
+    ld a, c         ; Resultado en A
+    
     pop hl
     pop de
     pop bc
