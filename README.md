@@ -1,123 +1,150 @@
+
 # DMG Cold Wallet
 
-Una billetera fría de demostración para Game Boy DMG.
+> **⚠️ ADVERTENCIA:**  
+> Este es un proyecto de demostración técnica. **No implementa cifrado criptográfico** y los datos se almacenan en texto plano en la SRAM.  
+> **No debe usarse para almacenar criptomonedas reales.**
 
-## Descripción
+Una billetera fría (*cold wallet*) de demostración para la Game Boy (DMG), diseñada con una arquitectura de software moderna y modular.
 
-DMG Cold Wallet es una aplicación minimalista que permite gestionar múltiples wallets, generar códigos QR dinámicos, enviar transacciones por cable Link y guardar datos en SRAM. Diseñada como demostración técnica para ilustrar el potencial del hardware Game Boy en aplicaciones modernas.
+---
 
-**ADVERTENCIA**: Esta versión de demostración no implementa cifrado. No utilizar para almacenar valores reales.
+## 📖 Descripción
 
-## Características
+DMG Cold Wallet es una aplicación *homebrew* para la Game Boy original que explora la viabilidad del hardware clásico para aplicaciones modernas. Permite:
 
-- Interfaz de usuario minimalista en ASCII
-- Entrada de direcciones y montos mediante selector virtual
-- Gestión de múltiples wallets en SRAM
-- Generación de códigos QR (Version 1, EC Level L)
-- Comunicación por cable Link (protocolo con ACK/NACK)
-- Soporte para Game Boy Printer
-- Persistencia en SRAM con verificación de checksum
+- Gestionar múltiples “wallets” almacenados en la SRAM del cartucho.  
+- Crear transacciones mediante una interfaz de texto.  
+- Generar dinámicamente códigos QR (Versión 1, Nivel L) para la transacción actual.  
+- Comunicarse con otros dispositivos por Cable Link (con CRC y reintentos).  
+- Imprimir el código QR con la Game Boy Printer.  
+- Verificar la integridad de datos en SRAM usando checksum.  
+- Ejecutar pruebas unitarias con la ROM de test incorporada (`test_runner.gb`).
 
-## Novedades en esta versión
+---
 
-- Mejoras significativas en la robustez del código
-- Parámetros configurables para timeouts y debounce
-- Validaciones de espacio SRAM en tiempo de compilación
-- Mejor manejo de errores y feedback
-- Soporte para compilación en modo DEBUG
+## ✨ Características Principales
 
-## Compilación
+- **Gestión de Wallets**:  
+  - Crear, seleccionar y borrar wallets.  
+  - Almacenamiento en SRAM con checksum de integridad.
 
-### Requisitos:
-- RGBDS (Rednex Game Boy Development System) v0.5.0 o superior
+- **Creación de Transacciones**:  
+  - Introducción de direcciones y montos en pantalla de texto.
 
-### Pasos para compilar:
+- **Generación de Códigos QR**:  
+  - Versión 1, Nivel L.  
+  - Adaptado al display de la DMG.
+
+- **Comunicación por Cable Link**:  
+  - Protocolo propio con CRC y reintentos automáticos.
+
+- **Soporte para Game Boy Printer**:  
+  - Impresión directa del QR de la transacción.
+
+- **Framework de Pruebas**:  
+  - ROM de pruebas (`test_runner.gb`) para asegurar la lógica crítica.
+
+---
+
+## 🗂️ Estructura del Proyecto
+
+```text
+DMGCW-main-7/
+├── src/           # Módulos de aplicación (orquestadores de alto nivel)
+│   ├── main.asm       # Punto de entrada y menú principal
+│   ├── input.asm      # Teclado virtual genérico
+│   ├── confirm.asm    # Pantalla de confirmación de TX
+│   ├── sram.asm       # UI gestión de wallets
+│   ├── qr.asm         # Orquestador de generación de QR
+│   ├── link.asm       # Orquestador de comunicación Link
+│   ├── printer.asm    # Orquestador de impresión
+│   └── sound.asm      # Gestión de efectos de sonido
+│
+├── lib/           # Librerías de lógica reutilizable
+│   ├── utils.asm       # Funciones comunes (memoria, I/O, debounce)
+│   ├── ui.asm          # Primitivas de dibujo para la UI
+│   ├── sram_manager.asm# API de bajo nivel para la SRAM
+│   ├── qr_engine.asm   # Lógica para construir la matriz QR
+│   ├── rs_ecc.asm      # Algoritmo Reed–Solomon para ECC
+│   ├── link_engine.asm # Protocolo de bajo nivel para Cable Link
+│   ├── printer_comm.asm# Protocolo de bajo nivel para Game Boy Printer
+│   └── debug.asm       # Utilidades para depuración
+│
+├── inc/           # Archivos de inclusión
+│   ├── constants.inc   # Constantes globales
+│   ├── hardware.inc    # Definiciones de hardware Game Boy
+│   └── assert.inc      # Macros de aserción en compilación
+│
+├── obj/           # (Generado) Archivos de objeto
+├── bin/           # (Generado) ROMs finales
+│   ├── dmg-wallet.gb     # ROM principal
+│   └── test_runner.gb    # Suite de pruebas
+│
+└── makefile       # Script de compilación modular
+````
+
+---
+
+## ⚙️ Compilación
+
+### Requisitos
+
+* **RGBDS** v0.5.0 o superior
+* `make` (Linux, macOS o WSL en Windows)
+
+### Comandos
+
 ```bash
-# Compilación normal
-make
+# Compilar la ROM principal (bin/dmg-wallet.gb)
+make all
 
-# Compilación con modo DEBUG activado
-make debug
+# Compilar y lanzar en emulador (configurable en makefile)
+make flash
 
-# Limpiar archivos generados
+# Limpiar artefactos de compilación
 make clean
 
-# Compilar y cargar en emulador (editar Makefile para tu emulador preferido)
-make flash
+# Compilar con flags de depuración
+make debug
+
+# Ejecutar la suite de pruebas unitarias
+make run-test
 ```
 
-El archivo ROM resultante se generará en `bin/dmg-wallet.gb`
+---
 
-## Instalación
-
-Puedes ejecutar el archivo ROM en:
-
-1. Una Game Boy DMG real usando un cartucho flash como EverDrive-GB o similar
-2. Un emulador como BGB, SameBoy, mGBA o Gambatte
-
-## Uso
-
-### Menú Principal
-
-- **Nuevo TX**: Ingresar dirección y monto para una nueva transacción
-- **Confirmar**: Revisar y confirmar la transacción actual
-- **Gestionar W**: Administrar wallets (crear, borrar, seleccionar)
-- **Enviar Link**: Transmitir datos de la transacción por cable Link
-- **Mostrar QR**: Generar y mostrar código QR de la transacción
-- **Imprimir QR**: Enviar código QR a la Game Boy Printer
-- **Salir**: Regresar al inicio
+## 🎮 Uso
 
 ### Controles
 
-- **D-Pad**: Navegación
-- **A**: Seleccionar
-- **B**: Cancelar/Volver
-- **Select**: Cambiar campo (en editor)
-- **Start**: Confirmar/Guardar
+* **D-Pad**: Navegar menús y selector de caracteres.
+* **A**: Seleccionar / Añadir carácter.
+* **B**: Cancelar / Volver / Borrar carácter.
+* **Start**: Confirmar / Guardar.
+* **Select**: Cambiar campo en entradas de texto.
 
-## Estructura del Proyecto
-```
-dmg-cold-wallet/
-├── inc/              # Archivos de inclusión
-│   ├── assert.inc    # Macros para validaciones
-│   ├── constants.inc # Constantes globales
-│   └── hardware.inc  # Definiciones de hardware
-├── lib/              # Librerías reutilizables
-│   ├── debug.asm     # Utilidades de depuración
-│   ├── sram_manager.asm # Gestor de SRAM
-│   ├── ui.asm        # Primitivas de UI
-│   └── rs_ecc.asm    # Algoritmo Reed-Solomon
-├── src/              # Código fuente principal
-│   ├── main.asm      # Punto de entrada y menú
-│   ├── input.asm     # Módulo de entrada de datos
-│   ├── confirm.asm   # Confirmación de transacción
-│   ├── sram.asm      # UI de gestión de wallets
-│   ├── link.asm      # Protocolo de comunicación
-│   ├── qr.asm        # Generador de QR
-│   ├── printer.asm   # Interfaz con Game Boy Printer
-│   ├── sound.asm     # Efectos de sonido
-│   └── utils.asm     # Utilidades generales
-└── makefile          # Script de compilación
-```
+### Flujo de la Aplicación
 
-## Limitaciones
+1. **Menú Principal**: Elige la funcionalidad deseada.
+2. **Gestionar Wallets**: Crea o borra wallets antes de operar.
+3. **Nuevo TX**: Introduce dirección y monto.
+4. **Confirmar**: Revisa y confirma; se almacena en el log de SRAM.
+5. **Mostrar QR / Enviar Link / Imprimir**: Actúa sobre la última transacción.
 
-- **Sin cifrado**: Los datos se almacenan sin cifrar en SRAM
-- **QR Version 1**: Limitado a aproximadamente 17 bytes de datos
-- **Game Boy DMG**: Optimizado para la consola original en blanco y negro
-- **Botones limitados**: UI adaptada a los pocos botones disponibles
+---
 
-## Desarrollo y Contribución
+## 🤝 Desarrollo y Contribución
 
-Si deseas contribuir al proyecto, por favor consulta:
+¡Nos encantan las contribuciones! Antes de empezar:
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Guía de contribución
-- [STYLE_GUIDE.md](STYLE_GUIDE.md) - Convenciones de código
+1. Lee la guía [CONTRIBUTING.md](./CONTRIBUTING.md).
+2. Sigue las convenciones de [STYLE\_GUIDE.md](./STYLE_GUIDE.md).
+3. Asegúrate de que todos los tests pasen (`make run-test`).
 
-## Créditos
+---
 
-Desarrollado como demostración técnica.
+## 📝 Licencia
 
-## Licencia
+Este proyecto está bajo la **Licencia MIT**. Consulta [LICENSE](./LICENSE) para más detalles.
 
-Este proyecto se distribuye como código abierto bajo la licencia MIT.
