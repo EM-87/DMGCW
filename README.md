@@ -1,5 +1,9 @@
-
 # DMG Cold Wallet
+
+<p align="center">
+  <img src="boxart_coldwallet.png" alt="DMG Cold Wallet Box Art" width="300"/>
+</p>
+
 
 > **⚠️ ADVERTENCIA:**  
 > Este es un proyecto de demostración técnica. **No implementa cifrado criptográfico** y los datos se almacenan en texto plano en la SRAM.  
