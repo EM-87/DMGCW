@@ -1,1228 +1,161 @@
-; sram.asm - Módulo de gestión de SRAM para múltiples wallets
-INCLUDE "hardware.inc"
-INCLUDE "../inc/constants.inc"
+; ====================================================================
+; File: src/sram.asm - UI de Gestión de Wallets (Refactorizado)
+; ====================================================================
 
-SECTION "SRAMModule", ROM1[$5500]
+INCLUDE "inc/hardware.inc"
+INCLUDE "inc/constants.inc"
+INCLUDE "lib/utils.asm"      ; <<<--- INCLUIR LAS UTILIDADES CENTRALIZADAS
 
-; --- Constantes locales ---
-; Constantes para modos de lista
-DELETE_MODE     EQU 0    ; Modo lista para eliminar wallet
-SELECT_MODE     EQU 1    ; Modo lista para seleccionar wallet
+; --- Constantes del Módulo ---
+SRAM_MENU_ITEMS     EQU 4      ; Crear, Seleccionar, Borrar, Volver
+LIST_MODE_SELECT    EQU 0
+LIST_MODE_DELETE    EQU 1
 
-; Constantes para resultados de selección
-LIST_RESULT_CANCELED   EQU 0    ; Operación cancelada
-LIST_RESULT_SELECTED   EQU 1    ; Item seleccionado
+; --- Dependencias Externas ---
+EXTERN JoyState, CurrentWalletName, InputPromptAddr, InputDestBufAddr, InputMaxLen
+EXTERN PlayBeepNav, PlayBeepConfirm, PlayBeepError
+EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY
+EXTERN SRAM_GetWalletCount, SRAM_LoadWallet, SRAM_CreateWallet, SRAM_DeleteWallet, WALLET_NAME, WALLET_ADDR
+EXTERN Entry_Input
 
-; --- Entry Point ---
+; --- Variables WRAM ---
+SECTION "SramUIVars", WRAM0[$C300]
+    sram_menu_cursor_pos:   DS 1
+    sram_wallet_count:      DS 1
+    sram_list_cursor_pos:   DS 1
+    sram_list_mode:         DS 1
+    sram_wallet_names_buffer: DS (WALLET_NAME_LEN + 1) * MAX_WALLETS
+    NewWalletNameBuffer:    DS WALLET_NAME_LEN + 1
+    NewWalletAddrBuffer:    DS WALLET_ADDR_LEN + 1
+
+; --- Strings ---
+SECTION "SramStrings", ROM1
+SramMenuTitle:       DB "Gestion de Wallets",0
+MenuOptionCreate:    DB "Crear Wallet",0, MenuOptionSelect: DB "Seleccionar Wallet",0, MenuOptionDelete: DB "Eliminar Wallet",0, MenuOptionBack: DB "Volver",0
+CreateNamePrompt:    DB "Nombre wallet:",0, CreateAddrPrompt: DB "Direccion wallet:",0
+NoWalletsMsg:        DB "No hay wallets.",0, LimitErrorMsg: DB "Limite de wallets.",0
+ListTitleSelect:     DB "Seleccionar Wallet",0, ListTitleDelete: DB "Eliminar Wallet",0
+ConfirmDeletePrompt: DB "Borrar? A=Si B=No",0
+MsgCreated:          DB "Wallet creado.",0, MsgDeleted: DB "Wallet eliminado.",0, MsgSelected: DB "Wallet seleccionado.",0
+
+; ====================================================================
+; Entry Point y Lógica del Menú Principal
+; ====================================================================
+SECTION "SramMenuCode", ROM1
+
 Entry_SRAM:
-    push af
-    push bc
-    push de
-    push hl
-    
-    ; Mostrar menú de gestión de wallets
-    call DrawWalletMenu
-    
-.menuLoop:
-    ; Leer input
-    call ReadJoypad
+    xor a, ld [sram_menu_cursor_pos], a
+.loop_menu:
+    call DrawSramMenu, call ReadJoypadWithDebounce
     ld a, [JoyState]
-    ld b, a
-    ld a, [JoyPrevState]
-    cp b
-    jr z, .menuLoop
-    
-    ; Actualizar estado previo
-    ld a, b
-    ld [JoyPrevState], a
-    
-    ; Verificar botones
-    bit PADB_UP, a
-    jr nz, .moveUp
-    
-    bit PADB_DOWN, a
-    jr nz, .moveDown
-    
-    bit PADB_A, a
-    jr nz, .selectOption
-    
-    bit PADB_B, a
-    jr nz, .exit
-    
-    jr .menuLoop
-    
-.moveUp:
-    ld a, [WalletMenuCursor]
-    or a
-    jr z, .wrapDown  ; Si estamos en 0, ir al último
-    
-    ; Decrementar cursor
-    dec a
-    ld [WalletMenuCursor], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Redibujar menú
-    call DrawWalletMenu
-    
-    jr .menuLoop
-    
-.wrapDown:
-    ; Ir a la última opción
-    ld a, 3  ; Opciones 0-3
-    ld [WalletMenuCursor], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Redibujar menú
-    call DrawWalletMenu
-    
-    jr .menuLoop
-    
-.moveDown:
-    ld a, [WalletMenuCursor]
-    cp 3  ; Última opción
-    jr z, .wrapUp  ; Si estamos en el último, ir al primero
-    
-    ; Incrementar cursor
-    inc a
-    ld [WalletMenuCursor], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Redibujar menú
-    call DrawWalletMenu
-    
-    jr .menuLoop
-    
-.wrapUp:
-    ; Ir a la primera opción
-    xor a
-    ld [WalletMenuCursor], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Redibujar menú
-    call DrawWalletMenu
-    
-    jr .menuLoop
-    
-.selectOption:
-    ; Reproducir sonido
-    call PlayBeepConfirm
-    
-    ; Ejecutar opción según cursor
-    ld a, [WalletMenuCursor]
-    or a
-    jp z, DoListWallets
-    
-    cp 1
-    jp z, DoCreateWallet
-    
-    cp 2
-    jp z, DoDeleteWallet
-    
-    cp 3
-    jp z, DoSelectWallet
-    
-    ; Si llegamos aquí, índice inválido
-    jr .menuLoop
-    
-.exit:
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    pop hl
-    pop de
-    pop bc
-    pop af
+    bit BUTTON_UP_BIT, a,   jr nz, .move_up
+    bit BUTTON_DOWN_BIT, a, jr nz, .move_down
+    bit BUTTON_A_BIT, a,    jr nz, .select_option
+    bit BUTTON_B_BIT, a,    ret
+    jr .loop_menu
+
+.move_up:
+    ld a, [sram_menu_cursor_pos], or a, jr z, .wrap_bottom, dec a, jr .update_cursor
+.wrap_bottom: ld a, SRAM_MENU_ITEMS - 1
+.update_cursor: ld [sram_menu_cursor_pos], a, call PlayBeepNav, jr .loop_menu
+
+.move_down:
+    ld a, [sram_menu_cursor_pos], inc a, cp SRAM_MENU_ITEMS, jr c, .update_cursor, xor a, jr .update_cursor
+
+.select_option:
+    call PlayBeepConfirm, ld a, [sram_menu_cursor_pos]
+    cp 0, jp z, CreateWalletFlow
+    cp 1, jp z, SelectWalletFlow
+    cp 2, jp z, DeleteWalletFlow
     ret
 
-; DrawWalletMenu: Dibuja el menú de gestión de wallets
-DrawWalletMenu:
-    ; Limpiar pantalla
-    call UI_ClearScreen
-    
-    ; Dibujar caja
-    ld a, 1   ; x
-    ld b, 1   ; y
-    ld c, 18  ; width
-    ld d, 16  ; height
-    call UI_DrawBox
-    
-    ; Dibujar título
-    ld hl, WalletTitle
-    ld c, 1   ; box_x
-    ld d, 1   ; box_y
-    ld e, 18  ; box_width
-    call UI_PrintInBox
-    
-    ; Obtener número de wallets
-    call SRAM_GetWalletCount
-    
-    ; Si no hay wallets, mostrar mensaje
-    or a
-    jr nz, .hasWallets
-    
-    ld hl, WalletEmptyMsg
-    ld d, 8   ; y
-    ld e, 3   ; x
-    call UI_PrintStringAtXY
-    
-    jr .waitKey
-    
-.hasWallets:
-    ; Mostrar lista de wallets
-    ld b, a   ; B = número total de wallets
-    xor a
-    ld [ListIndex], a  ; Inicializar índice
-    ld c, 3   ; C = posición Y inicial
-    
-.listLoop:
-    ; Cargar wallet por índice
-    push bc
-    ld a, [ListIndex]
-    call SRAM_LoadWallet
-    pop bc
-    
-    ; Verificar si se cargó correctamente
-    or a
-    jr nz, .skipWallet
-    
-    ; Mostrar índice
-    ld a, [ListIndex]
-    inc a      ; Mostrar como 1-based
-    add "0"    ; Convertir a ASCII
-    ld d, c    ; y
-    ld e, 2    ; x
-    call UI_PrintAtXY
-    
-    ; Mostrar nombre
-    ld hl, WALLET_NAME
-    ld d, c    ; y
-    ld e, 4    ; x
-    call PrintStringAtXY
-    
-    ; Siguiente posición Y
-    inc c
-    
-.skipWallet:
-    ; Incrementar índice
-    ld a, [ListIndex]
-    inc a
-    ld [ListIndex], a
-    
-    ; Verificar si hemos procesado todos los wallets
-    cp b
-    jr c, .listLoop
-    
-.waitKey:
-    ; Instrucción para volver
-    ld hl, BackMsg
-    ld d, 14  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    
-    ; Esperar tecla para volver
-    call WaitButton
-    
-    ; Redibujar menú
-    jp DrawWalletMenu
+; ====================================================================
+; Flujos de Lógica: Crear, Seleccionar, Borrar
+; ====================================================================
+CreateWalletFlow:
+    call SRAM_GetWalletCount, cp MAX_WALLETS, jr nc, .limit_error
+    call GetText, CreateNamePrompt, NewWalletNameBuffer, WALLET_NAME_LEN
+    call GetText, CreateAddrPrompt, NewWalletAddrBuffer, WALLET_ADDR_LEN
+    ld hl, NewWalletNameBuffer, ld de, WALLET_NAME, ld bc, WALLET_NAME_LEN, call CopyString
+    ld hl, NewWalletAddrBuffer, ld de, WALLET_ADDR, ld bc, WALLET_ADDR_LEN, call CopyString
+    call SRAM_CreateWallet, call ShowMessage, MsgCreated, jp Entry_SRAM
+.limit_error: call ShowMessage, LimitErrorMsg, jp Entry_SRAM
 
-; DrawSelectListScreen: Pantalla genérica para seleccionar de la lista
-DrawSelectListScreen:
-    ; Limpiar pantalla
-    call ClearScreen
-    
-    ; Dibujar caja
-    ld a, 1   ; x
-    ld b, 1   ; y
-    ld c, 18  ; width
-    ld d, 16  ; height
-    call DrawBox
-    
-    ; Determinar título según modo
-    ld a, [ListMode]
-    or a
-    jr nz, .selectTitle
-    
-    ; Título para eliminar
-    ld hl, DeleteTitle
-    jr .drawTitle
-    
-.selectTitle:
-    ; Título para seleccionar
-    ld hl, SelectTitle
-    
-.drawTitle:
-    ld c, 1   ; box_x
-    ld d, 1   ; box_y
-    ld e, 18  ; box_width
-    call PrintInBox
-    
-    ; Obtener número de wallets
-    call SRAM_GetWalletCount
-    
-    ; Si no hay wallets, mostrar mensaje
-    or a
-    jr nz, .hasWallets
-    
-    ld hl, WalletEmptyMsg
-    ld d, 8   ; y
-    ld e, 3   ; x
-    call PrintStringAtXY
-    
-    jr .showInstructions
-    
-.hasWallets:
-    ; Mostrar lista de wallets
-    ld b, a   ; B = número total de wallets
-    xor a
-    ld [ListIndex], a  ; Inicializar índice
-    ld c, 3   ; C = posición Y inicial
-    
-.listLoop:
-    ; Cargar wallet por índice
-    push bc
-    ld a, [ListIndex]
-    call SRAM_LoadWallet
-    pop bc
-    
-    ; Verificar si se cargó correctamente
-    or a
-    jr nz, .skipWallet
-    
-    ; Mostrar índice
-    ld a, [ListIndex]
-    inc a      ; Mostrar como 1-based
-    add "0"    ; Convertir a ASCII
-    ld d, c    ; y
-    ld e, 3    ; x
-    call PrintAtXY
-    
-    ; Mostrar nombre
-    ld hl, WALLET_NAME
-    ld d, c    ; y
-    ld e, 5    ; x
-    call PrintStringAtXY
-    
-    ; Dibujar cursor si es la selección actual
-    ld a, [ListCursor]
-    ld e, a
-    ld a, [ListIndex]
-    cp e
-    jr nz, .noCursor
-    
-    ; Dibujar cursor
-    ld a, ">"
-    ld d, c   ; y
-    ld e, 1   ; x
-    call PrintAtXY
-    
-.noCursor:
-    ; Siguiente posición Y
-    inc c
-    
-.skipWallet:
-    ; Incrementar índice
-    ld a, [ListIndex]
-    inc a
-    ld [ListIndex], a
-    
-    ; Verificar si hemos procesado todos los wallets
-    cp b
-    jr c, .listLoop
-    
-.showInstructions:
-    ; Determinar instrucciones según modo
-    ld a, [ListMode]
-    or a
-    jr nz, .selectInstr
-    
-    ; Instrucciones para eliminar
-    ld hl, DeleteInstr
-    jr .showInstr
-    
-.selectInstr:
-    ; Instrucciones para seleccionar
-    ld hl, SelectInstr
-    
-.showInstr:
-    ld d, 14  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    
-    ret
+SelectWalletFlow: ld a, LIST_MODE_SELECT, call WalletList_Show, jp Entry_SRAM
+DeleteWalletFlow: ld a, LIST_MODE_DELETE, call WalletList_Show, jp Entry_SRAM
 
-; HandleListSelection: Maneja la navegación y selección en una lista
-; Utiliza ListCursor y ListIndex
-; Establece ListResult con el resultado (0=cancelado, 1=seleccionado)
-HandleListSelection:
-    ; Inicializar cursor
-    xor a
-    ld [ListCursor], a
-    ld [ListResult], a
-    
-.inputLoop:
-    ; Leer input
-    call ReadJoypad
-    ld a, [JoyState]
-    ld b, a
-    ld a, [JoyPrevState]
-    cp b
-    jr z, .inputLoop
-    
-    ; Actualizar estado previo
-    ld a, b
-    ld [JoyPrevState], a
-    
-    ; Verificar botones
-    bit PADB_UP, a
-    jr nz, .moveUp
-    
-    bit PADB_DOWN, a
-    jr nz, .moveDown
-    
-    bit PADB_A, a
-    jr nz, .select
-    
-    bit PADB_B, a
-    jr nz, .cancel
-    
-    jr .inputLoop
-    
-.moveUp:
-    ld a, [ListCursor]
-    or a
-    jr z, .wrapDown  ; Si estamos en 0, ir al último
-    
-    ; Decrementar cursor
-    dec a
-    ld [ListCursor], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Redibujar pantalla
-    call DrawSelectListScreen
-    
-    jr .inputLoop
-    
-.wrapDown:
-    ; Obtener número de wallets
-    call SRAM_GetWalletCount
-    dec a  ; 0-indexado
-    
-    ; Guardar como cursor
-    ld [ListCursor], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Redibujar pantalla
-    call DrawSelectListScreen
-    
-    jr .inputLoop
-    
-.moveDown:
-    ; Obtener número de wallets
-    call SRAM_GetWalletCount
-    dec a  ; 0-indexado
-    
-    ; Comparar con cursor actual
-    ld b, a
-    ld a, [ListCursor]
-    cp b
-    jr z, .wrapUp  ; Si estamos en el último, ir al primero
-    
-    ; Incrementar cursor
-    inc a
-    ld [ListCursor], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Redibujar pantalla
-    call DrawSelectListScreen
-    
-    jr .inputLoop
-    
-.wrapUp:
-    ; Ir a la primera opción
-    xor a
-    ld [ListCursor], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Redibujar pantalla
-    call DrawSelectListScreen
-    
-    jr .inputLoop
-    
-.select:
-    ; Reproducir sonido
-    call PlayBeepConfirm
-    
-    ; Marcar como seleccionado
-    ld a, LIST_RESULT_SELECTED
-    ld [ListResult], a
-    ret
-    
-.cancel:
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Marcar como cancelado
-    ld a, LIST_RESULT_CANCELED
-    ld [ListResult], a
-    ret
+WalletList_Show:
+    ld [sram_list_mode], a, call SRAM_GetWalletCount, or a, jr z, .no_wallets, ld [sram_wallet_count], a
+    ld b, 0, ld c, a, ld hl, sram_wallet_names_buffer
+.load_loop:
+    ld a, b, cp c, jr z, .loaded
+    push hl, push bc, ld a, b, call SRAM_LoadWallet, pop bc, pop hl, ld de, WALLET_NAME
+.copy_name: ld a, [de+], ld [hl+], a, or a, jr nz, .copy_name
+    inc b, jr .load_loop
+.loaded:
+    xor a, ld [sram_list_cursor_pos], a
+.list_loop:
+    call DrawWalletList, call ReadJoypadWithDebounce, ld a, [JoyState]
+    bit BUTTON_UP_BIT, a, jr nz, .list_up, bit BUTTON_DOWN_BIT, a, jr nz, .list_down
+    bit BUTTON_A_BIT, a, jr nz, .list_select, bit BUTTON_B_BIT, a, jr z, .list_loop, ret
 
-; DrawDeleteConfirm: Pide confirmación para eliminar
-DrawDeleteConfirm:
-    ; Limpiar área de mensaje
-    ld d, 10  ; y
-    ld e, 2   ; x
-    ld b, 16  ; longitud
-    call ClearLine
-    
-    ld d, 11  ; y
-    ld e, 2   ; x
-    ld b, 16  ; longitud
-    call ClearLine
-    
-    ; Mostrar mensaje de confirmación
-    ld hl, DeleteConfirmMsg
-    ld d, 10  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    
-    ; Instrucciones
-    ld hl, DeleteConfirmInstr
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    
-    ret
+.no_wallets: call ShowMessage, NoWalletsMsg, ret
+.list_up:
+    ld a, [sram_list_cursor_pos], or a, jr z, .list_wrap_bot, dec a, jr .list_upd
+.list_wrap_bot: ld a, [sram_wallet_count], dec a
+.list_upd: ld [sram_list_cursor_pos], a, call PlayBeepNav, jr .list_loop
+.list_down:
+    ld a, [sram_list_cursor_pos], inc a, ld b, a, ld a, [sram_wallet_count], cp b, jr c, .list_upd, xor a, jr .list_upd
+.list_select:
+    call PlayBeepConfirm, ld a, [sram_list_mode], cp LIST_MODE_DELETE, jr z, .delete_wallet
+    ld a, [sram_list_cursor_pos], call SRAM_LoadWallet, call ShowMessage, MsgSelected, ret
+.delete_wallet:
+    call ConfirmDelete, or a, jr z, .list_loop, ld a, [sram_list_cursor_pos], call SRAM_DeleteWallet, call ShowMessage, MsgDeleted, ret
 
-; GetWalletNameLength: Calcula longitud del nombre actual
-; Salida: A = longitud
-GetWalletNameLength:
-    push bc
-    push hl
-    
-    ld hl, WalletNameBuffer
-    call SRAM_StringLength  ; Usando función de sram_manager
-    
-    pop hl
-    pop bc
-    ret
+; ====================================================================
+; Subrutinas y UI
+; ====================================================================
+GetText: ; Entrada: HL=Prompt, DE=DestBuffer, C=MaxLen
+    push de, push bc
+    ld a, h, ld [InputPromptAddr+1], a, ld a, l, ld [InputPromptAddr], a
+    ld a, e, ld [InputDestBufAddr+1], a, ld a, d, ld [InputDestBufAddr], a
+    pop af, ld [InputMaxLen], a
+    call Entry_Input, pop de, pop bc, ret
 
-; GetWalletAddrLength: Calcula longitud de la dirección actual
-; Salida: A = longitud
-GetWalletAddrLength:
-    push bc
-    push hl
-    
-    ld hl, WalletAddrBuffer
-    call SRAM_StringLength  ; Usando función de sram_manager
-    
-    pop hl
-    pop bc
-    ret
+DrawSramMenu:
+    call UI_ClearScreen, ld hl, SramMenuTitle, ld d, 2, ld e, 2, call UI_PrintStringAtXY
+    ld hl, MenuOptionCreate, ld d, 5, ld e, 3, call DrawMenuItem, 0
+    ld hl, MenuOptionSelect, ld d, 6, ld e, 3, call DrawMenuItem, 1
+    ld hl, MenuOptionDelete, ld d, 7, ld e, 3, call DrawMenuItem, 2
+    ld hl, MenuOptionBack,   ld d, 8, ld e, 3, call DrawMenuItem, 3, ret
+DrawMenuItem:
+    push af, ld a, [sram_menu_cursor_pos], cp [sp+2], jr nz, .no_cursor
+    ld a, '>', ld b, e, dec b, push de, ld e, b, call UI_PrintAtXY, pop de
+.no_cursor: call UI_PrintStringAtXY, pop af, ret
 
-; Funciones de UI para mostrar errores y mensajes
-ShowWalletFullError:
-    ; Mostrar mensaje de error
-    ld hl, WalletFullMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepError
-    call WaitButton
-    ret
+DrawWalletList:
+    call UI_ClearScreen, ld a, [sram_list_mode], or a, jr z, .title_select
+    ld hl, ListTitleDelete, jr .draw_title
+.title_select: ld hl, ListTitleSelect
+.draw_title:
+    ld d, 2, ld e, 2, call UI_PrintStringAtXY
+    ld c, [sram_wallet_count], ld hl, sram_wallet_names_buffer, xor b
+.loop_draw:
+    ld a, b, cp c, jr z, .done_draw
+    push hl, ld a, b, add 5, ld d, a
+    ld a, [sram_list_cursor_pos], cp b, jr nz, .no_cursor_list
+    ld a, '>', ld e, 1, call UI_PrintAtXY
+.no_cursor_list:
+    ld e, 3, call UI_PrintStringAtXY, pop hl
+.skip_name: ld a, [hl+], or a, jr nz, .skip_name
+    inc b, jr .loop_draw
+.done_draw: ret
 
-ShowNoWalletsError:
-    ; Mostrar mensaje de error
-    ld hl, NoWalletsMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepError
-    call WaitButton
-    ret
+ConfirmDelete:
+    call ShowMessageNoWait, ConfirmDeletePrompt
+.wait_confirm:
+    call ReadJoypad, ld a, [JoyState], ld c, a, and (1 << BUTTON_A_BIT) | (1 << BUTTON_B_BIT), cp c, jr z, .wait_confirm
+    ld a, [JoyState], bit BUTTON_A_BIT, a, ret
 
-ShowInvalidDataError:
-    ; Mostrar mensaje de error
-    ld hl, InvalidDataMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepError
-    ret
-
-ShowWalletSavedMsg:
-    ; Mostrar mensaje de éxito
-    ld hl, WalletSavedMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepConfirm
-    ret
-
-ShowDeletedMsg:
-    ; Mostrar mensaje de éxito
-    ld hl, WalletDeletedMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepConfirm
-    ret
-
-ShowSelectedMsg:
-    ; Mostrar mensaje de éxito
-    ld hl, WalletSelectedMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepConfirm
-    ret
-
-ShowWalletSaveError:
-    ; Mostrar mensaje de error
-    ld hl, WalletSaveErrorMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepError
-    ret
-
-ShowWalletDeleteError:
-    ; Mostrar mensaje de error
-    ld hl, WalletDeleteErrorMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepError
-    ret
-
-ShowWalletSelectError:
-    ; Mostrar mensaje de error
-    ld hl, WalletSelectErrorMsg
-    ld d, 12  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    call PlayBeepError
-    ret
-
-; ShowNumberAtXY: Muestra un número en la pantalla
-; Entrada: A = número, D = y, E = x
-ShowNumberAtXY:
-    push af
-    
-    ; Convertir a ASCII
-    add "0"
-    
-    ; Mostrar
-    call PrintAtXY
-    
-    pop af
-    ret
-
-; WaitButton: Espera hasta que se pulse cualquier botón
-WaitButton:
-    ; Guardar estado actual
-    ld a, [JoyState]
-    ld [JoyPrevState], a
-    
-.wait:
-    ; Leer joypad
-    call ReadJoypad
-    
-    ; Verificar cambios
-    ld a, [JoyState]
-    ld b, a
-    ld a, [JoyPrevState]
-    cp b
-    jr z, .wait
-    
-    ; Verificar si se pulsó algún botón
-    ld a, b
-    and %11110000   ; Máscara para botones A, B, Select, Start
-    jr z, .wait
-    
-    ; Actualizar estado previo
-    ld a, b
-    ld [JoyPrevState], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ret
-
-; --- Variables en WRAM ---
-SECTION "SRAMVars", WRAM0[$CB00]
-WalletMenuCursor:      DS 1  ; Cursor en menú de wallets
-WalletNameBuffer:      DS WALLET_NAME_LEN  ; Buffer para nombre de wallet
-WalletAddrBuffer:      DS WALLET_ADDR_LEN  ; Buffer para dirección de wallet
-InputField:            DS 1  ; Campo actual (0=nombre, 1=dirección)
-InputChar:             DS 1  ; Índice de caracter actual
-InputPos:              DS 1  ; Posición actual en el campo
-ListCursor:            DS 1  ; Cursor en pantalla de lista (eliminar/seleccionar)
-ListIndex:             DS 1  ; Índice temporal para recorrer wallets
-ListMode:              DS 1  ; Modo de lista (0=eliminar, 1=seleccionar)
-ListResult:            DS 1  ; Resultado de selección (0=cancelado, 1=seleccionado)
-
-; --- Datos y Mensajes ---
-SECTION "SRAMData", ROM1
-WalletTitle:         DB "GESTIONAR WALLETS", 0
-WalletOptList:       DB "Listar wallets", 0
-WalletOptCreate:     DB "Crear wallet", 0
-WalletOptDelete:     DB "Eliminar wallet", 0
-WalletOptSelect:     DB "Seleccionar wallet", 0
-WalletCountMsg:      DB "Wallets: ", 0
-WalletCurrentMsg:    DB "Actual: ", 0
-WalletInstructions:  DB "A:Sel B:Volver", 0
-WalletListTitle:     DB "LISTA DE WALLETS", 0
-WalletEmptyMsg:      DB "No hay wallets", 0
-BackMsg:             DB "B: Volver", 0
-CreateTitle:         DB "CREAR WALLET", 0
-NameLabel:           DB "Nombre:", 0
-AddrLabel:           DB "Direccion:", 0
-CharLabel:           DB "Caracter:", 0
-FieldLabel:          DB "Campo:", 0
-NameValue:           DB "NOMBRE", 0
-AddrValue:           DB "DIRECCION", 0
-CreateInstr1:        DB "A:Add Sel:Campo", 0
-CreateInstr2:        DB "Start:Guardar B:Cancel", 0
-DeleteTitle:         DB "ELIMINAR WALLET", 0
-DeleteInstr:         DB "A:Selec. B:Volver", 0
-DeleteConfirmMsg:    DB "Confirmar borrado?", 0
-DeleteConfirmInstr:  DB "A:Si B:No", 0
-SelectTitle:         DB "SELECCIONAR WALLET", 0
-SelectInstr:         DB "A:Selec. B:Volver", 0
-ErrorTitle:          DB "ERROR", 0
-WalletFullMsg:       DB "Limite alcanzado", 0
-NoWalletsMsg:        DB "No hay wallets", 0
-InvalidDataMsg:      DB "Datos incompletos", 0
-WalletSavedMsg:      DB "Wallet guardado!", 0
-WalletDeletedMsg:    DB "Wallet eliminado!", 0
-WalletSelectedMsg:   DB "Wallet seleccionado!", 0
-WalletSaveErrorMsg:  DB "Error al guardar", 0
-WalletDeleteErrorMsg: DB "Error al eliminar", 0
-WalletSelectErrorMsg: DB "Error al seleccionar", 0
-
-; Juego de caracteres para entrada
-Charset: DB "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
-CharsetLen: EQU $-Charset
-
-; DoCreateWallet: Crea un nuevo wallet
-DoCreateWallet:
-    ; Verificar si hay espacio
-    call SRAM_GetWalletCount
-    cp MAX_WALLETS
-    jr c, .hasSpace
-    
-    ; No hay espacio, mostrar error
-    call ShowWalletFullError
-    
-    ; Volver al menú
-    jp DrawWalletMenu
-    
-.hasSpace:
-    ; Mostrar pantalla de creación
-    call DrawCreateScreen
-    
-    ; Inicializar buffer de entrada
-    ld hl, WalletNameBuffer
-    xor a
-    ld [hl], a
-    
-    ld hl, WalletAddrBuffer
-    xor a
-    ld [hl], a
-    
-    ; Inicializar estado de entrada
-    xor a
-    ld [InputField], a  ; 0 = nombre
-    ld [InputPos], a
-    
-.inputLoop:
-    ; Leer input
-    call ReadJoypad
-    ld a, [JoyState]
-    ld b, a
-    ld a, [JoyPrevState]
-    cp b
-    jr z, .inputLoop
-    
-    ; Actualizar estado previo
-    ld a, b
-    ld [JoyPrevState], a
-    
-    ; Verificar botones
-    bit PADB_LEFT, a
-    jr nz, .charPrev
-    
-    bit PADB_RIGHT, a
-    jr nz, .charNext
-    
-    bit PADB_SELECT, a
-    jr nz, .toggleField
-    
-    bit PADB_A, a
-    jr nz, .addChar
-    
-    bit PADB_B, a
-    jr nz, .cancel
-    
-    bit PADB_START, a
-    jr nz, .saveWallet
-    
-    jr .inputLoop
-    
-.charPrev:
-    ; Caracter anterior
-    ld a, [InputChar]
-    or a
-    jr nz, .notFirstChar
-    
-    ; Wrap a último caracter
-    ld a, CharsetLen - 1
-    jr .updateChar
-    
-.notFirstChar:
-    dec a
-    
-.updateChar:
-    ld [InputChar], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Actualizar pantalla
-    call UpdateCreateScreen
-    
-    jr .inputLoop
-    
-.charNext:
-    ; Siguiente caracter
-    ld a, [InputChar]
-    inc a
-    cp CharsetLen
-    jr c, .notLastChar
-    
-    ; Wrap a primer caracter
-    xor a
-    
-.notLastChar:
-    ld [InputChar], a
-    
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Actualizar pantalla
-    call UpdateCreateScreen
-    
-    jr .inputLoop
-    
-.toggleField:
-    ; Cambiar entre nombre y dirección
-    ld a, [InputField]
-    xor 1
-    ld [InputField], a
-    
-    ; Actualizar posición según campo actual
-    ld a, [InputField]
-    or a
-    jr nz, .getAddrPos
-    
-    ; Obtener posición en nombre
-    call GetWalletNameLength
-    jr .updatePos
-    
-.getAddrPos:
-    ; Obtener posición en dirección
-    call GetWalletAddrLength
-    
-.updatePos:
-    ld [InputPos], a
-    
-    ; Reproducir sonido
-    call PlayBeepConfirm
-    
-    ; Actualizar pantalla
-    call UpdateCreateScreen
-    
-    jr .inputLoop
-    
-.addChar:
-    ; Añadir caracter al campo actual
-    ld a, [InputField]
-    or a
-    jr nz, .addToAddr
-    
-    ; Añadir al nombre
-    ld a, [InputPos]
-    cp WALLET_NAME_LEN - 1
-    jr nc, .inputLoop  ; No añadir si estamos en el límite
-    
-    ; Obtener caracter actual
-    ld a, [InputChar]
-    ld b, a
-    
-    ; Obtener caracter del charset
-    ld hl, Charset
-    ld c, 0
-    add hl, bc
-    ld a, [hl]
-    
-    ; Añadir al buffer
-    ld hl, WalletNameBuffer
-    ld c, a           ; Guardar caracter
-    ld a, [InputPos]
-    ld b, 0
-    push bc
-    ld c, a
-    add hl, bc        ; HL += posición
-    pop bc
-    ld a, c           ; Recuperar caracter
-    ld [hl], a
-    
-    ; Añadir terminador
-    inc hl
-    ld [hl], 0
-    
-    ; Incrementar posición
-    ld a, [InputPos]
-    inc a
-    ld [InputPos], a
-    
-    jr .charAdded
-    
-.addToAddr:
-    ; Añadir a la dirección
-    ld a, [InputPos]
-    cp WALLET_ADDR_LEN - 1
-    jr nc, .inputLoop  ; No añadir si estamos en el límite
-    
-    ; Obtener caracter actual
-    ld a, [InputChar]
-    ld b, a
-    
-    ; Obtener caracter del charset
-    ld hl, Charset
-    ld c, 0
-    add hl, bc
-    ld a, [hl]
-    
-    ; Añadir al buffer
-    ld hl, WalletAddrBuffer
-    ld c, a           ; Guardar caracter
-    ld a, [InputPos]
-    ld b, 0
-    push bc
-    ld c, a
-    add hl, bc        ; HL += posición
-    pop bc
-    ld a, c           ; Recuperar caracter
-    ld [hl], a
-    
-    ; Añadir terminador
-    inc hl
-    ld [hl], 0
-    
-    ; Incrementar posición
-    ld a, [InputPos]
-    inc a
-    ld [InputPos], a
-    
-.charAdded:
-    ; Reproducir sonido
-    call PlayBeepConfirm
-    
-    ; Actualizar pantalla
-    call UpdateCreateScreen
-    
-    jr .inputLoop
-    
-.cancel:
-    ; Reproducir sonido
-    call PlayBeepNav
-    
-    ; Volver al menú
-    jp DrawWalletMenu
-    
-.saveWallet:
-    ; Verificar que ambos campos tengan datos
-    ld a, [WalletNameBuffer]
-    or a
-    jr z, .invalidData
-    
-    ld a, [WalletAddrBuffer]
-    or a
-    jr z, .invalidData
-    
-    ; Copiar datos a buffers de API
-    ld hl, WalletNameBuffer
-    ld de, WALLET_NAME
-    ld bc, WALLET_NAME_LEN
-    call CopyMemory
-    
-    ld hl, WalletAddrBuffer
-    ld de, WALLET_ADDR
-    ld bc, WALLET_ADDR_LEN
-    call CopyMemory
-    
-    ; Guardar wallet usando API
-    call SRAM_CreateWallet
-    
-    ; Verificar resultado
-    or a
-    jr nz, .saveError
-    
-    ; Mostrar mensaje de éxito
-    call ShowWalletSavedMsg
-    
-    ; Esperar tecla
-    call WaitButton
-    
-    ; Volver al menú
-    jp DrawWalletMenu
-    
-.invalidData:
-    ; Mostrar error de datos inválidos
-    call ShowInvalidDataError
-    
-    ; Volver al bucle
-    jp .inputLoop
-    
-.saveError:
-    ; Mostrar error al guardar
-    call ShowWalletSaveError
-    call WaitButton
-    jp DrawWalletMenu
-
-; DoDeleteWallet: Elimina un wallet
-DoDeleteWallet:
-    ; Verificar si hay wallets
-    call SRAM_GetWalletCount
-    or a
-    jr nz, .hasWallets
-    
-    ; No hay wallets, mostrar error
-    call ShowNoWalletsError
-    
-    ; Volver al menú
-    jp DrawWalletMenu
-    
-.hasWallets:
-    ; Mostrar pantalla de selección para eliminar
-    call DrawSelectListScreen
-    ld a, DELETE_MODE
-    ld [ListMode], a
-    
-    ; Esperar selección
-    call HandleListSelection
-    
-    ; Verificar resultado
-    ld a, [ListResult]
-    cp LIST_RESULT_SELECTED
-    jr nz, .returnToMenu  ; Si no se seleccionó (canceló)
-    
-    ; Pedir confirmación
-    call DrawDeleteConfirm
-    
-    ; Esperar respuesta
-.confirmLoop:
-    ; Leer input
-    call ReadJoypad
-    ld a, [JoyState]
-    ld b, a
-    ld a, [JoyPrevState]
-    cp b
-    jr z, .confirmLoop
-    
-    ; Actualizar estado previo
-    ld a, b
-    ld [JoyPrevState], a
-    
-    ; Verificar botones
-    bit PADB_A, a
-    jr nz, .confirmDelete
-    
-    bit PADB_B, a
-    jr nz, .returnToMenu
-    
-    jr .confirmLoop
-    
-.confirmDelete:
-    ; Eliminar wallet usando API
-    ld a, [ListCursor]
-    call SRAM_DeleteWallet
-    
-    ; Verificar resultado
-    or a
-    jr nz, .deleteError
-    
-    ; Mostrar mensaje de éxito
-    call ShowDeletedMsg
-    
-    ; Esperar tecla
-    call WaitButton
-    
-.returnToMenu:
-    ; Volver al menú
-    jp DrawWalletMenu
-    
-.deleteError:
-    ; Mostrar error al eliminar
-    call ShowWalletDeleteError
-    call WaitButton
-    jp DrawWalletMenu
-
-; DoSelectWallet: Selecciona un wallet como actual
-DoSelectWallet:
-    ; Verificar si hay wallets
-    call SRAM_GetWalletCount
-    or a
-    jr nz, .hasWallets
-    
-    ; No hay wallets, mostrar error
-    call ShowNoWalletsError
-    
-    ; Volver al menú
-    jp DrawWalletMenu
-    
-.hasWallets:
-    ; Mostrar pantalla de selección
-    call DrawSelectListScreen
-    ld a, SELECT_MODE
-    ld [ListMode], a
-    
-    ; Esperar selección
-    call HandleListSelection
-    
-    ; Verificar resultado
-    ld a, [ListResult]
-    cp LIST_RESULT_SELECTED
-    jr nz, .returnToMenu  ; Si no se seleccionó (canceló)
-    
-    ; Cargar wallet seleccionado usando API
-    ld a, [ListCursor]
-    call SRAM_LoadWallet
-    
-    ; Verificar resultado
-    or a
-    jr nz, .selectError
-    
-    ; Copiar datos a buffers actuales
-    ld hl, WALLET_NAME
-    ld de, CurrentWalletName
-    ld bc, WALLET_NAME_LEN
-    call CopyMemory
-    
-    ld hl, WALLET_ADDR
-    ld de, CurrentWalletAddr
-    ld bc, WALLET_ADDR_LEN
-    call CopyMemory
-    
-    ; Mostrar mensaje de éxito
-    call ShowSelectedMsg
-    
-    ; Esperar tecla
-    call WaitButton
-    
-.returnToMenu:
-    ; Volver al menú
-    jp DrawWalletMenu
-    
-.selectError:
-    ; Mostrar error al seleccionar
-    call ShowWalletSelectError
-    call WaitButton
-    jp DrawWalletMenu_width
-    call PrintInBox
-    
-    ; Dibujar opciones
-    ld hl, WalletOptList
-    ld d, 3   ; y
-    ld e, 4   ; x
-    call PrintStringAtXY
-    
-    ld hl, WalletOptCreate
-    ld d, 4   ; y
-    ld e, 4   ; x
-    call PrintStringAtXY
-    
-    ld hl, WalletOptDelete
-    ld d, 5   ; y
-    ld e, 4   ; x
-    call PrintStringAtXY
-    
-    ld hl, WalletOptSelect
-    ld d, 6   ; y
-    ld e, 4   ; x
-    call PrintStringAtXY
-    
-    ; Dibujar indicador del cursor
-    ld a, [WalletMenuCursor]
-    add 3  ; y base + offset cursor
-    ld d, a
-    ld e, 2  ; x
-    ld a, ">"
-    call PrintAtXY
-    
-    ; Dibujar información de wallets actuales
-    ld hl, WalletCountMsg
-    ld d, 9   ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    
-    ; Mostrar contador de wallets (usando API)
-    call SRAM_GetWalletCount
-    ld d, 9   ; y
-    ld e, 16  ; x
-    call ShowNumberAtXY
-    
-    ; Mostrar wallet actual
-    ld hl, WalletCurrentMsg
-    ld d, 10  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    
-    ; Mostrar nombre de wallet actual
-    ld hl, CurrentWalletName
-    ld d, 11  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    
-    ; Mostrar instrucciones
-    ld hl, WalletInstructions
-    ld d, 14  ; y
-    ld e, 2   ; x
-    call PrintStringAtXY
-    
-    ret
-
-; DoListWallets: Muestra la lista de wallets
-DoListWallets:
-    ; Limpiar pantalla
-    call ClearScreen
-    
-    ; Dibujar caja
-    ld a, 1   ; x
-    ld b, 1   ; y
-    ld c, 18  ; width
-    ld d, 16  ; height
-    call DrawBox
-    
-    ; Dibujar título
-    ld hl, WalletListTitle
-    ld c, 1   ; box_x
-    ld d, 1   ; box_y
-    ld e, 18  ; box
+ShowMessage: call ShowMessageNoWait, ld a, (1 << BUTTON_A_BIT) | (1 << BUTTON_B_BIT), call WaitButton, ret
+ShowMessageNoWait: call UI_ClearScreen, ld d, 8, ld e, 3, call UI_PrintStringAtXY, ret
