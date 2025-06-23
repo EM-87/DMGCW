@@ -1,161 +1,183 @@
 ; ====================================================================
-; Archivo: src/utils.asm - VERSIÓN FINAL Y CORREGIDA
+; Archivo: utils.asm - Funciones de utilidades comunes para DMG Cold Wallet
+; Versión corregida y robusta.
 ; ====================================================================
+
 INCLUDE "hardware.inc"
-INCLUDE "inc/constants.inc"
+INCLUDE "constants.inc"
+; Declarar variables globales que se usarán aquí
+EXTERN JoyState, JoyPrevState
 
-; --- Funciones de manejo de memoria ---
-
-; CopyMemory: Copia BC bytes desde HL a DE
-CopyMemory:
-    push af
-    push bc
-    push de
-    push hl
-.loopCM:
-    ld a, b
-    or c
-    jr z, .doneCM
-    ld a, [hl+]
-    ld [de], a
-    inc de
-    dec bc
-    jr .loopCM
-.doneCM:
-    pop hl
-    pop de
-    pop bc
-    pop af
-    ret
-
-; FillMemory: Llena BC bytes en HL con valor en A
-FillMemory:
-    push af          ; Preservar A, que contiene el valor de relleno
-    push bc
-    push de
-    push hl
-    
-    ld d, a          ; Guardar el valor de relleno en D para no perderlo
-.loopFM:
-    ld a, b          ; Usar A temporalmente para comprobar el contador BC
-    or c
-    jr z, .doneFM
-    ld a, d          ; Recuperar el valor de relleno desde D
-    ld [hl+], a
-    dec bc
-    jr .loopFM
-.doneFM:
-    pop hl
-    pop de
-    pop bc
-    pop af           ; Restaurar el valor original de A
-    ret
-
-; CopyString: Copia cadena terminada en 0 de HL a DE (máx. BC bytes)
-; Garantiza un terminador nulo al final.
+; ------------------------------------------------------------
+; CopyString: Copia una cadena de Source (HL) a Dest (DE)
+; Garantiza un terminador nulo y respeta el límite de BC.
+; Entradas: HL = puntero source, DE = puntero dest, BC = límite
+; ------------------------------------------------------------
 CopyString:
     push af
     push bc
     push de
     push hl
-.loopCS:
+.loop:
     ld a, b
     or c
-    jr z, .limit_reached  ; Límite de bytes alcanzado
+    jr z, .limit_reached ; Salta si BC llega a 0
 
-    ld a, [hl+]           ; Leer carácter y avanzar puntero origen
-    ld [de], a            ; Escribir carácter
-    inc de                ; Avanzar puntero destino
-    dec bc                ; Decrementar contador de límite
+    ld a, [hl+]
+    ld [de], a
+    inc de
+    dec bc
 
-    or a                  ; Comprobar si el carácter era el terminador (0)
-    jr nz, .loopCS        ; Si no, repetir el bucle
-    jr .doneCS            ; Si sí, la copia está completa y terminada
+    or a ; Comprueba si el carácter copiado era el terminador nulo
+    jr nz, .loop
+    jr .done ; Si era nulo, la copia está completa y terminada
 
 .limit_reached:
-    dec de                ; Retroceder para sobrescribir el último carácter copiado
-    xor a                 ; a = 0
-    ld [de], a            ; Forzar el terminador nulo
+    ; Forzar terminador nulo si se alcanzó el límite.
+    ; DE ya apunta a la posición siguiente, así que retrocedemos uno.
+    dec de
+    xor a
+    ld [de], a
 
-.doneCS:
+.done:
     pop hl
     pop de
     pop bc
     pop af
     ret
 
-; StringLength: Calcula la longitud de una cadena terminada en 0
-; Entrada: HL = puntero a cadena
-; Salida: A = longitud
-StringLength:
+; ------------------------------------------------------------
+; FillMemory: Llena un bloque de memoria con un valor
+; Entradas: HL = puntero, BC = cantidad, A = valor
+; ------------------------------------------------------------
+FillMemory:
     push bc
     push hl
-    
-    ld b, 0
-.loopSL:
-    ld a, [hl+]
-    or a
-    jr z, .doneSL
-    inc b
-    jr .loopSL
-    
-.doneSL:
+    ld d, a ; Guardar el valor a rellenar para no perderlo en el bucle
+.loop:
     ld a, b
-    
+    or c
+    jr z, .done_fill ; Terminar si BC es 0
+
+    ld a, d
+    ld [hl+], a
+    dec bc
+    jr .loop
+.done_fill:
     pop hl
     pop bc
     ret
 
-; --- Rutinas de I/O y temporización ---
+; ------------------------------------------------------------
+; StringLength: Devuelve la longitud de una cadena
+; Entradas: HL = puntero a la cadena
+; Salida: A = longitud
+; ------------------------------------------------------------
+StringLength:
+    push hl
+    xor a ; Contador de longitud
+.loop:
+    ld d, [hl+]
+    or d
+    jr z, .done_len
+    inc a
+    jr .loop
+.done_len:
+    pop hl
+    ret
 
-; WaitButton: Espera pulsación y liberación de un botón.
-; Entrada: A = máscara del botón (ej. PADB_B)
+; ------------------------------------------------------------
+; WaitButton: Espera la pulsación Y LIBERACIÓN de un botón.
+; Entradas: A = Máscara del botón (ej. BUTTON_A_BIT)
+; ------------------------------------------------------------
 WaitButton:
-    push af               ; Preservar flags y la máscara de botón
     push bc
-    ld b, a               ; Guardar la máscara en B para no perderla
-.wait:
-    call ReadJoypad       ; Leer estado actual de los botones
-    ld a, [JoyState]
-    and b                 ; Aislar el botón que nos interesa
-    jr z, .wait           ; Si es cero, no está presionado. Esperar.
-.release:
-    call ReadJoypad       ; El botón está presionado, ahora esperar a que se suelte
+    ld b, a ; Guardar la máscara del botón en B
+.wait_press:
+    call ReadJoypadWithDebounce
     ld a, [JoyState]
     and b
-    jr nz, .release       ; Si no es cero, sigue presionado. Esperar.
-    
-    call PlayBeepNav      ; Dar feedback al usuario una vez se ha soltado el botón
+    jr z, .wait_press ; Esperar a que el bit del botón esté activo
+
+.wait_release:
+    call ReadJoypadWithDebounce
+    ld a, [JoyState]
+    and b
+    jr nz, .wait_release ; Esperar a que el bit del botón esté inactivo
+
     pop bc
+    ret
+
+; ------------------------------------------------------------
+; WaitVBlank: Espera a la próxima interrupción VBlank de forma segura.
+; ------------------------------------------------------------
+WaitVBlank:
+    push af
+.wait:
+    ld a, [rLY]
+    cp 144 ; VRAM es accesible durante el VBlank (líneas 144-153)
+    jr c, .wait
     pop af
     ret
 
-; DelayFrames: Espera A frames
-; Entrada: A = número de frames a esperar
-DelayFrames:
-    push bc
-    
+; ------------------------------------------------------------
+; ReadJoypadWithDebounce: Lee el joypad con debounce.
+; Esta es la implementación completa y correcta.
+; ------------------------------------------------------------
+ReadJoypadWithDebounce:
+    call ReadJoypad
+    ld a, [JoyState]
     ld b, a
-.loopDF:
+    ld a, [JoyPrevState]
+    cp b
+    ret z ; Sin cambios, salir
+
+    ld a, b
+    ld [JoyPrevState], a
+
+    ; Esperar frames de debounce para estabilizar la lectura
+    ld b, DEBOUNCE_FRAMES
+.delay_loop:
     push bc
     call WaitVBlank
     pop bc
     dec b
-    jr nz, .loopDF
-    
-    pop bc
-    ret
-    
-; WaitVBlank: Espera al inicio del VBlank
-WaitVBlank:
-    push af
-.waitVB:
-    ld a, [rLY]
-    cp 144
-    jr c, .waitVB
-    pop af
+    jr nz, .delay_loop
+
+    call ReadJoypad ; Releer para obtener el estado final estable
     ret
 
-; --- Variables ---
-SECTION "Utils_Vars", WRAM0[$CD00]
-HexBuffer:    DS 3   ; Buffer para conversión a hex (2 caracteres + null)
+; ------------------------------------------------------------
+; ReadJoypad: Lectura de bajo nivel del registro P1.
+; ------------------------------------------------------------
+ReadJoypad:
+    push bc
+    ; Leer cruceta (P14=1)
+    ld a, P1F_GET_DPAD
+    ld [rP1], a
+    ld a, [rP1]
+    ld a, [rP1]
+    ld a, [rP1]
+    cpl
+    and $0F
+    swap a
+    ld b, a
+    ; Leer botones (P15=1)
+    ld a, P1F_GET_BTN
+    ld [rP1], a
+    ld a, [rP1]
+    ld a, [rP1]
+    ld a, [rP1]
+    cpl
+    and $0F
+    or b
+    ld [JoyState], a
+    ; Restaurar P1 para que no interfiera
+    ld a, P1F_GET_NONE
+    ld [rP1], a
+    pop bc
+    ret
+
+; ====================================================================
+; Fin de utils.asm
+; ====================================================================
