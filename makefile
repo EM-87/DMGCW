@@ -29,21 +29,21 @@ APP_SOURCES := \
 
 # Librerías de lógica y utilidades
 LIB_SOURCES := \
-    utils.asm \
-    ui.asm \
-    sram_manager.asm \
-    qr_engine.asm \
-    rs_ecc.asm \
-    link_engine.asm \
-    printer_comm.asm \
-    debug.asm
+    $(LIB_DIR)/utils.asm \
+    $(LIB_DIR)/ui.asm \
+    $(LIB_DIR)/sram_manager.asm \
+    $(LIB_DIR)/qr_engine.asm \
+    $(LIB_DIR)/rs_ecc.asm \
+    $(LIB_DIR)/link_engine.asm \
+    $(LIB_DIR)/printer_comm.asm \
+    $(LIB_DIR)/debug.asm
 
 # Archivo de pruebas
 TEST_SOURCE := test_main.asm
 
 # --- Generación de Archivos de Objeto ---
 APP_OBJECTS := $(patsubst %.asm,$(OBJ_DIR)/app_%.o,$(APP_SOURCES))
-LIB_OBJECTS := $(patsubst %.asm,$(OBJ_DIR)/lib_%.o,$(LIB_SOURCES))
+LIB_OBJECTS := $(patsubst $(LIB_DIR)/%.asm,$(OBJ_DIR)/lib_%.o,$(LIB_SOURCES))
 TEST_OBJECT := $(patsubst %.asm,$(OBJ_DIR)/%.o,$(TEST_SOURCE))
 ALL_OBJECTS := $(APP_OBJECTS) $(LIB_OBJECTS)
 
