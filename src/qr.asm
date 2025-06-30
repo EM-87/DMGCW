@@ -4,13 +4,13 @@
 
 INCLUDE "inc/hardware.inc"
 INCLUDE "inc/constants.inc"
-INCLUDE "lib/utils.asm"      ; <<<--- INCLUIR LAS UTILIDADES CENTRALIZADAS
 
 ; --- Declaraciones Externas ---
 EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY
 EXTERN PlayBeepNav
 EXTERN AddressBuf, AmountBuf ; Buffers globales
 EXTERN RS_GenerateECC, EncodeAlphaNumeric, BuildMatrix, ApplyMask, GetModule ; <<<--- Lógica QR delegada
+EXTERN CopyMemory, CopyString, StringLength, WaitButton, WaitVBlank
 
 ; --- Constantes QR (específicas del módulo) ---
 QR_MODULES EQU QR_SIZE * QR_SIZE
