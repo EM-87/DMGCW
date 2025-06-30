@@ -53,7 +53,7 @@ ROM_PATH     := $(BIN_DIR)/$(ROM_NAME).gb
 TEST_ROM_PATH := $(BIN_DIR)/test_runner.gb
 
 # --- Flags de Compilación ---
-RGBASMFLAGS  := -i$(INC_DIR)/ -p 0xFF
+RGBASMFLAGS  := -I$(INC_DIR)/ -p 0xFF
 RGBLINKFLAGS := -p 0xFF -n $(BIN_DIR)/$(ROM_NAME).sym
 RGBFIXFLAGS  := -p 0xFF -v -C
 
