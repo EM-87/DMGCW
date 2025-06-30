@@ -37,18 +37,24 @@ SECTION "QRModule", ROM1[$5000]
 
 Entry_QR_Gen:
     call UI_ClearScreen
-    ld hl, QRGeneratingMsg, ld d, 8, ld e, 5, call UI_PrintStringAtXY
+    ld hl, QRGeneratingMsg
+    ld d, 8
+    ld e, 5
+    call UI_PrintStringAtXY
     call WaitVBlank
 
-    call PrepareInputData, jr c, .no_data ; Prepara los datos y verifica si existen
+    call PrepareInputData
+    jr c, .no_data ; Prepara los datos y verifica si existen
 
     ; Codificar datos alfanuméricos
     ld hl, QR_InputBuf
     call EncodeAlphaNumeric, jr c, .data_exceeds_capacity ; Devuelve carry en error
 
     ; Añadir padding y calcular ECC
-    call PadToByte, call PadDataBytes
-    ld hl, QR_BitBuf, ld b, QR_CAPACITY
+    call PadToByte
+    call PadDataBytes
+    ld hl, QR_BitBuf
+    ld b, QR_CAPACITY
     call RS_GenerateECC ; Entrada: HL=datos, B=longitud. Salida: DE=puntero a ECC
     ex de, hl
     ld de, QR_BitBuf + QR_CAPACITY
@@ -62,57 +68,114 @@ Entry_QR_Gen:
     call DrawQRScreen
 
     ; Esperar salida
-    ld a, (1 << BUTTON_A_BIT) | (1 << BUTTON_B_BIT), call WaitButton, ret
+    ld a, (1 << BUTTON_A_BIT) | (1 << BUTTON_B_BIT)
+    call WaitButton
+    ret
 
 .no_data:
-    call ShowMessage, QRNoDataMsg, ret
+    ld hl, QRNoDataMsg
+    call ShowMessage
+    ret
 .data_exceeds_capacity:
-    call ShowMessage, QRTooLongMsg, ret
+    ld hl, QRTooLongMsg
+    call ShowMessage
+    ret
 
 ; ====================================================================
 ; Subrutinas
 ; ====================================================================
 
 PrepareInputData:
-    ld hl, AddressBuf, ld a, [hl], or a, jr z, .error ; No hay dirección
-    ld de, QR_InputBuf, ld bc, QR_CAPACITY, call CopyString
-    ld hl, QR_InputBuf, call StringLength, ld b, a, add hl, bc
-    ld a, '|', ld [hl+], a
-    ld de, hl, ld hl, AmountBuf
-    ld a, [hl], or a, jr z, .error ; No hay monto
-    ld a, QR_CAPACITY, sub b, dec a, ld c, a, ld b, 0
+    ld hl, AddressBuf
+    ld a, [hl]
+    or a
+    jr z, .error ; No hay dirección
+    ld de, QR_InputBuf
+    ld bc, QR_CAPACITY
     call CopyString
-    xor a, ret ; Éxito
+    ld hl, QR_InputBuf
+    call StringLength
+    ld b, a
+    add hl, bc
+    ld a, '|'
+    ld [hl+], a
+    ld de, hl
+    ld hl, AmountBuf
+    ld a, [hl]
+    or a
+    jr z, .error ; No hay monto
+    ld a, QR_CAPACITY
+    sub b
+    dec a
+    ld c, a
+    ld b, 0
+    call CopyString
+    xor a
+    ret ; Éxito
 .error:
-    scf, ret ; Error (carry set)
+    scf
+    ret ; Error (carry set)
 
 DrawQRScreen:
     call UI_ClearScreen
-    ld hl, QRTitle, ld d, 0, ld e, 6, call UI_PrintStringAtXY
-    ld hl, QRPartialMsg, ld d, 1, ld e, 2, call UI_PrintStringAtXY
+    ld hl, QRTitle
+    ld d, 0
+    ld e, 6
+    call UI_PrintStringAtXY
+    ld hl, QRPartialMsg
+    ld d, 1
+    ld e, 2
+    call UI_PrintStringAtXY
     ld b, 0 ; y_qr
 .row_loop:
-    ld a, b, cp 16, jr z, .draw_done ; Limitar a 16 filas para que quepan
-    push bc, ld c, 0 ; x_qr
+    ld a, b
+    cp 16
+    jr z, .draw_done ; Limitar a 16 filas para que quepan
+    push bc
+    ld c, 0 ; x_qr
 .col_loop:
-    ld a, c, cp 18, jr z, .row_done ; Limitar a 18 columnas
-    push bc, ld d, b, ld e, c, call GetModule
-    or a, jr z, .white_module
-    ld a, '#', jr .draw_module
+    ld a, c
+    cp 18
+    jr z, .row_done ; Limitar a 18 columnas
+    push bc
+    ld d, b
+    ld e, c
+    call GetModule
+    or a
+    jr z, .white_module
+    ld a, '#'
+    jr .draw_module
 .white_module:
     ld a, ' '
 .draw_module:
-    pop bc, ld d, b, add 2, ld e, c, add 1, call UI_PrintAtXY
-    inc c, jr .col_loop
+    pop bc
+    ld d, b
+    add 2
+    ld e, c
+    add 1
+    call UI_PrintAtXY
+    inc c
+    jr .col_loop
 .row_done:
-    pop bc, inc b, jr .row_loop
+    pop bc
+    inc b
+    jr .row_loop
 .draw_done:
-    ld hl, QRInstructions, ld d, 18, ld e, 2, call UI_PrintStringAtXY, ret
+    ld hl, QRInstructions
+    ld d, 18
+    ld e, 2
+    call UI_PrintStringAtXY
+    ret
 
 ShowMessage:
     ; HL = puntero al mensaje (pasado por pila)
-    call UI_ClearScreen, ld d, 8, ld e, 3, call UI_PrintStringAtXY
-    ld a, (1 << BUTTON_A_BIT) | (1 << BUTTON_B_BIT), call WaitButton, ret
+    call UI_ClearScreen
+    ld d, 8
+    ld e, 3
+    call UI_PrintStringAtXY
+    ld a, (1 << BUTTON_A_BIT) | (1 << BUTTON_B_BIT)
+    call WaitButton
+    ret
 
 ; ====================================================================
 ; --- Lógica Delegada ---
