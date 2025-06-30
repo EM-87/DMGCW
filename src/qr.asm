@@ -4,7 +4,8 @@
 
 INCLUDE "inc/hardware.inc"
 INCLUDE "inc/constants.inc"
-INCLUDE "lib/utils.asm"      ; <<<--- INCLUIR LAS UTILIDADES CENTRALIZADAS
+; --- Utilidades compartidas ---
+EXTERN CopyString, StringLength, WaitButton, WaitVBlank, CopyMemory
 
 ; --- Declaraciones Externas ---
 EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY
