@@ -31,149 +31,71 @@ Entry_Input:
     cp b, jr z, .input_loop
     ld a, b, ld [JoyPrevState], a
 
-    bit BUTTON_LEFT_BIT, b
-    jr nz, .handle_left
-    bit BUTTON_RIGHT_BIT, b
-    jr nz, .handle_right
-    bit BUTTON_A_BIT, b
-    jr nz, .handle_a
-    bit BUTTON_B_BIT, b
-    jr nz, .handle_b
-    bit BUTTON_START_BIT, b
-    jr nz, .handle_start
+    bit BUTTON_LEFT_BIT, b,  jr nz, .handle_left
+    bit BUTTON_RIGHT_BIT, b, jr nz, .handle_right
+    bit BUTTON_A_BIT, b,     jr nz, .handle_a
+    bit BUTTON_B_BIT, b,     jr nz, .handle_b
+    bit BUTTON_START_BIT, b, jr nz, .handle_start
     jr .input_loop
 
 .handle_left:
-    ld a, [InputCursorPos]
-    or a
-    jr z, .wrap_right
-    dec a
-    jr .update_cursor
+    ld a, [InputCursorPos], or a, jr z, .wrap_right, dec a, jr .update_cursor
 .wrap_right: ld a, CharsetLen - 1
 .update_cursor:
-    ld [InputCursorPos], a
-    call PlayBeepNav
-    jr .input_loop
+    ld [InputCursorPos], a, call PlayBeepNav, jr .input_loop
 
 .handle_right:
-    ld a, [InputCursorPos]
-    inc a
-    cp CharsetLen
-    jr c, .update_cursor
-    xor a
-    jr .update_cursor
+    ld a, [InputCursorPos], inc a, cp CharsetLen, jr c, .update_cursor
+    xor a, jr .update_cursor
 
 .handle_a: ; Añadir caracter
-    ld a, [InputLen]
-    ld b, a
-    ld a, [InputMaxLen]
-    cp b
-    jr z, .buffer_full
-    ld a, [InputCursorPos]
-    call GetCharsetFromIndex
-    call Input_AddChar
-    call PlayBeepConfirm
-    jr .input_loop
+    ld a, [InputLen], ld b, a, ld a, [InputMaxLen], cp b, jr z, .buffer_full
+    ld a, [InputCursorPos], call GetCharsetFromIndex, call Input_AddChar, call PlayBeepConfirm, jr .input_loop
 .buffer_full:
-    call PlayBeepError
-    jr .input_loop
+    call PlayBeepError, jr .input_loop
 
 .handle_b: ; Borrar caracter
-    call Input_Backspace
-    call PlayBeepNav
-    jr .input_loop
+    call Input_Backspace, call PlayBeepNav, jr .input_loop
 
 .handle_start: ; Confirmar y salir
-    call PlayBeepConfirm
-    ret
+    call PlayBeepConfirm, ret
 
 ; --- Subrutinas de Lógica ---
 Input_Init:
-    xor a
-    ld [InputCursorPos], a
-    ld [InputLen], a
-    ld a, [InputDestBufAddr]
-    ld l, a
-    ld a, [InputDestBufAddr+1]
-    ld h, a
+    xor a, ld [InputCursorPos], a, ld [InputLen], a
+    ld a, [InputDestBufAddr], ld l, a, ld a, [InputDestBufAddr+1], ld h, a
     ld [hl], 0 ; Asegurar que el buffer de destino empieza vacío
     ret
 
 Input_AddChar: ; Entrada: A = caracter a añadir
-    ld hl, [InputDestBufAddr]
-    ld a, [InputLen]
-    ld c, a
-    ld b, 0
-    add hl, bc
-    ld a, [sp+2]
-    ld [hl+], a
-    xor a
-    ld [hl], a
-    ld hl, InputLen
-    inc [hl]
-    ret
+    ld hl, [InputDestBufAddr], ld a, [InputLen], ld c, a, ld b, 0, add hl, bc
+    ld a, [sp+2], ld [hl+], a, xor a, ld [hl], a
+    ld hl, InputLen, inc [hl], ret
 
 Input_Backspace:
-    ld a, [InputLen]
-    or a
-    ret z
-    dec [InputLen]
-    ld a, [InputLen]
-    ld c, a
-    ld b, 0
-    ld hl, [InputDestBufAddr]
-    add hl, bc
-    xor a
-    ld [hl], a
-    ret
+    ld a, [InputLen], or a, ret z
+    dec [InputLen], ld a, [InputLen], ld c, a, ld b, 0
+    ld hl, [InputDestBufAddr], add hl, bc, xor a, ld [hl], a, ret
 
 GetCharsetFromIndex: ; Entrada: A = índice, Salida: A = caracter
     push hl, bc
-    ld hl, Charset
-    ld b, 0
-    ld c, a
-    add hl, bc
-    ld a, [hl]
-    pop bc, hl
-    ret
+    ld hl, Charset, ld b, 0, ld c, a, add hl, bc, ld a, [hl]
+    pop bc, hl, ret
 
 ; --- Rutina de Dibujo ---
 Input_DrawUI:
-    call UI_ClearScreen
-    ld a, 1
-    ld b, 1
-    ld c, 18
-    ld d, 16
-    call UI_DrawBox
+    call UI_ClearScreen, ld a, 1, ld b, 1, ld c, 18, ld d, 16, call UI_DrawBox
     ; Prompt
-    ld hl, [InputPromptAddr]
-    ld d, 3
-    ld e, 2
-    call UI_PrintStringAtXY
+    ld hl, [InputPromptAddr], ld d, 3, ld e, 2, call UI_PrintStringAtXY
     ; Buffer de entrada
-    ld hl, [InputDestBufAddr]
-    ld d, 5
-    ld e, 2
-    call UI_PrintStringAtXY
+    ld hl, [InputDestBufAddr], ld d, 5, ld e, 2, call UI_PrintStringAtXY
     ; Selector de caracteres
-    ld a, [InputCursorPos]
-    call GetCharsetFromIndex
-    ld d, 8
-    ld e, 9
-    call UI_PrintAtXY
-    ld a, '<'
-    ld d, 8
-    ld e, 8
-    call UI_PrintAtXY
-    ld a, '>'
-    ld d, 8
-    ld e, 10
-    call UI_PrintAtXY
+    ld a, [InputCursorPos], call GetCharsetFromIndex
+    ld d, 8, ld e, 9, call UI_PrintAtXY
+    ld a, '<', ld d, 8, ld e, 8, call UI_PrintAtXY
+    ld a, '>', ld d, 8, ld e, 10, call UI_PrintAtXY
     ; Instrucciones
-    ld hl, InputInstructions
-    ld d, 12
-    ld e, 2
-    call UI_PrintStringAtXY
+    ld hl, InputInstructions, ld d, 12, ld e, 2, call UI_PrintStringAtXY
     ret
 
 ; ====================================================================
