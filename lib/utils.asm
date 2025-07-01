@@ -9,6 +9,31 @@ INCLUDE "constants.inc"
 EXTERN JoyState, JoyPrevState
 
 ; ------------------------------------------------------------
+; CopyMemory: Copia BC bytes desde HL a DE
+; Entradas: HL = origen, DE = destino, BC = cantidad
+; ------------------------------------------------------------
+CopyMemory:
+    push af
+    push bc
+    push de
+    push hl
+.loop:
+    ld a, b
+    or c
+    jr z, .done
+    ld a, [hl+]
+    ld [de], a
+    inc de
+    dec bc
+    jr .loop
+.done:
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ret
+
+; ------------------------------------------------------------
 ; CopyString: Copia una cadena de Source (HL) a Dest (DE)
 ; Garantiza un terminador nulo y respeta el límite de BC.
 ; Entradas: HL = puntero source, DE = puntero dest, BC = límite

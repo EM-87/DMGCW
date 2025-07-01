@@ -4,7 +4,7 @@
 
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
-INCLUDE "src/utils.asm" ; <<<--- 1. INCLUIR LAS UTILIDADES CENTRALIZADAS
+INCLUDE "lib/utils.asm" ; <<<--- 1. INCLUIR LAS UTILIDADES CENTRALIZADAS
 
 ; --- Variables WRAM para el Framework de Pruebas ---
 SECTION "TestVars", WRAM0[$C800]
