@@ -4,7 +4,10 @@
 
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
-INCLUDE "lib/utils.asm" ; <<<--- 1. INCLUIR LAS UTILIDADES CENTRALIZADAS
+
+; --- Dependencias Externas (utils.asm functions) ---
+EXTERN CopyMemory, CopyString, FillMemory, StringLength
+EXTERN WaitButton, WaitVBlank, ReadJoypadWithDebounce, ReadJoypad
 
 ; --- Variables WRAM para el Framework de Pruebas ---
 SECTION "TestVars", WRAM0[$C800]

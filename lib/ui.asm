@@ -1,6 +1,6 @@
 ; ui.asm - Primitivas de interfaz gráfica para DMG Cold Wallet
-INCLUDE "../inc/hardware.inc"
-INCLUDE "../inc/constants.inc"
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 
 ; --- API pública ---
 

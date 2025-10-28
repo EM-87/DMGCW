@@ -2,9 +2,8 @@
 ; File: src/sram.asm - UI de Gestión de Wallets (Refactorizado)
 ; ====================================================================
 
-INCLUDE "inc/hardware.inc"
-INCLUDE "inc/constants.inc"
-INCLUDE "lib/utils.asm"      ; <<<--- INCLUIR LAS UTILIDADES CENTRALIZADAS
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 
 ; --- Constantes del Módulo ---
 SRAM_MENU_ITEMS     EQU 4      ; Crear, Seleccionar, Borrar, Volver
@@ -17,6 +16,8 @@ EXTERN PlayBeepNav, PlayBeepConfirm, PlayBeepError
 EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY
 EXTERN SRAM_GetWalletCount, SRAM_LoadWallet, SRAM_CreateWallet, SRAM_DeleteWallet, WALLET_NAME, WALLET_ADDR
 EXTERN Entry_Input
+EXTERN CopyMemory, CopyString, FillMemory, StringLength
+EXTERN WaitButton, WaitVBlank, ReadJoypadWithDebounce, ReadJoypad
 
 ; --- Variables WRAM ---
 SECTION "SramUIVars", WRAM0[$C300]

@@ -1,6 +1,6 @@
 ; sram_manager.asm - API unificada de acceso a SRAM
-INCLUDE "../inc/hardware.inc"
-INCLUDE "../inc/constants.inc"
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 
 ; --- API pública ---
 

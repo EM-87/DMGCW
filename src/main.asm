@@ -3,8 +3,8 @@
 ; ====================================================================
 
 ; --- Inclusiones y Declaraciones Externas ---
-INCLUDE "inc/hardware.inc"
-INCLUDE "inc/constants.inc"
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 
 ; --- Declaración de funciones externas ---
 EXTERN CopyString, FillMemory, WaitButton, WaitVBlank, ReadJoypadWithDebounce, ReadJoypad

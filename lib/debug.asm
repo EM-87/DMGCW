@@ -1,8 +1,8 @@
 
 ; debug.asm - Utilidades de depuración para DMG Cold Wallet
 ; Solo se incluyen en compilaciones de debug (cuando DEBUG=1)
-INCLUDE "inc/hardware.inc"
-INCLUDE "inc/constants.inc"
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 
 IF DEF(DEBUG)
 

@@ -2,8 +2,8 @@
 ; File: src/qr.asm - Generación de QR Dinámico (Refactorizado)
 ; ====================================================================
 
-INCLUDE "inc/hardware.inc"
-INCLUDE "inc/constants.inc"
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 ; --- Utilidades compartidas ---
 EXTERN CopyString, StringLength, WaitButton, WaitVBlank, CopyMemory
 

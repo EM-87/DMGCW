@@ -2,8 +2,8 @@
 ; File: src/confirm.asm - Confirmación de Transacciones (Refactorizado Final)
 ; ====================================================================
 
-INCLUDE "inc/hardware.inc"
-INCLUDE "inc/constants.inc"
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 
 ; --- Declaraciones Externas ---
 EXTERN JoyState

@@ -2,8 +2,8 @@
 ; File: src/input.asm - Módulo de Entrada de Texto Genérico (Refactorizado)
 ; ====================================================================
 
-INCLUDE "inc/hardware.inc"
-INCLUDE "inc/constants.inc"
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 
 ; --- Declaraciones Externas ---
 EXTERN ReadJoypad, WaitButton, WaitVBlank, CopyString, StringLength, FillMemory

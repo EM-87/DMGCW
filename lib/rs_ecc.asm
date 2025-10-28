@@ -1,6 +1,6 @@
 ; rs_ecc.asm - Algoritmo Reed-Solomon para generación de QR
-INCLUDE "../inc/hardware.inc"
-INCLUDE "../inc/constants.inc"
+INCLUDE "hardware.inc"
+INCLUDE "constants.inc"
 
 ; --- Constantes ---
 ; Polinomio generador para QR version 1, level L (7 bytes)
