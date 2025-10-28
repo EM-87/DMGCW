@@ -42,7 +42,19 @@ QR_CAPACITY        EQU 17    ; Capacidad máxima en bytes (QR V1, EC L)
 QR_EC_SIZE         EQU 7     ; Tamaño error correction para EC L
 MODE_ALPHANUMERIC  EQU 2     ; Modo alfanumérico
 
-; --- Link ---
+; --- Link Cable Protocol ---
+LINK_MAGIC_REQ     EQU $A5   ; Byte de solicitud de detección
+LINK_MAGIC_ACK     EQU $5A   ; Respuesta de detección
+LINK_PROTO_VERSION EQU $01   ; Versión del protocolo
+LINK_VERSION_ACK   EQU $01   ; ACK de versión compatible
+LINK_START_BYTE    EQU $55   ; Inicio de trama
+LINK_END_BYTE      EQU $AA   ; Fin de trama
+LINK_FRAME_ACK     EQU $06   ; ACK de trama recibida
+LINK_VERIFY_REQ    EQU $F0   ; Solicitud de verificación
+LINK_VERIFY_ACK    EQU $0F   ; Confirmación de verificación
+LINK_MAX_PAYLOAD   EQU 64    ; Tamaño máximo de payload
+
+; --- Link (Legacy) ---
 TIMEOUT_SHORT      EQU $0800  ; Timeout corto (~2048 ciclos)
 TIMEOUT_LONG       EQU $8000  ; Timeout largo (~32768 ciclos)
 MAX_RETRIES        EQU 3     ; Reintentos de envío
