@@ -46,7 +46,7 @@ EncodeAlphaNumeric:
     push hl
 
     ; Count string length
-    call .CountLength
+    call QR_CountLength
     ld a, c
     cp QR_V1_CAPACITY + 1
     jr nc, .too_long
@@ -55,7 +55,7 @@ EncodeAlphaNumeric:
     ld hl, QR_BitBuf
     ld bc, QR_V1_TOTAL
     xor a
-    call .FillBytes
+    call QR_FillBytes
 
     pop hl
     push hl
@@ -65,15 +65,15 @@ EncodeAlphaNumeric:
     ld de, 0  ; Bit position
     ld a, QR_MODE_ALPHANUMERIC
     ld b, 4
-    call .WriteBits
+    call QR_WriteBits
 
     ; Write character count (9 bits for V1)
     pop hl
     push hl
-    call .CountLength
+    call QR_CountLength
     ld a, c
     ld b, 9
-    call .WriteBits
+    call QR_WriteBits
 
     ; Encode character pairs
     pop hl
@@ -84,7 +84,7 @@ EncodeAlphaNumeric:
 
     ; Get first character value
     push hl
-    call .GetAlphaValue
+    call QR_GetAlphaValue
     jr c, .invalid_char
     ld c, a  ; Save first char value
 
@@ -96,7 +96,7 @@ EncodeAlphaNumeric:
 
     ; Encode pair: value = (first * 45) + second
     push hl
-    call .GetAlphaValue
+    call QR_GetAlphaValue
     jr c, .invalid_char
     ld b, a  ; Second char value
 
@@ -121,7 +121,7 @@ EncodeAlphaNumeric:
 
     ; Write 11 bits
     ld b, 11
-    call .WriteBits
+    call QR_WriteBits
 
     pop hl
     inc hl
@@ -131,7 +131,7 @@ EncodeAlphaNumeric:
     ; Encode single character (6 bits)
     ld a, c
     ld b, 6
-    call .WriteBits
+    call QR_WriteBits
     jr .encode_done
 
 .encode_done:
@@ -153,7 +153,7 @@ EncodeAlphaNumeric:
 ; Input:  HL = string pointer
 ; Output: C = length
 ; ====================================================================
-.CountLength:
+QR_CountLength:
     ld c, 0
 .count_loop:
     ld a, [hl+]
@@ -166,22 +166,27 @@ EncodeAlphaNumeric:
 ; Helper: Fill bytes with value A
 ; Input:  HL = dest, BC = count, A = value
 ; ====================================================================
-.FillBytes:
-    ld [hl+], a
-    dec bc
+QR_FillBytes:
+    push af  ; Save fill value
+.fill_loop:
     ld a, b
     or c
-    ret z
-    ld a, [hl]
-    xor a
-    jr .FillBytes
+    jr z, .fill_done
+    pop af
+    push af
+    ld [hl+], a
+    dec bc
+    jr .fill_loop
+.fill_done:
+    pop af
+    ret
 
 ; ====================================================================
 ; Helper: Get alphanumeric character value (0-44)
 ; Input:  A = character
 ; Output: A = value (0-44), Carry set if invalid
 ; ====================================================================
-.GetAlphaValue:
+QR_GetAlphaValue:
     push hl
     push bc
     ld b, a
@@ -213,63 +218,98 @@ EncodeAlphaNumeric:
 ;         QR_BitBuf = target buffer
 ; Output: DE = updated bit position
 ; ====================================================================
-.WriteBits:
-    push hl
-    push bc
+QR_WriteBits:
+    ; Save value to write
+    ld c, a
 
-.write_bit_loop:
-    dec b
-    push bc
-
-    ; Get byte offset and bit position
-    ld h, d
-    ld l, e
-    srl h
-    rr l
-    srl h
-    rr l
-    srl h
-    rr l  ; Divide by 8
-
-    ld bc, QR_BitBuf
-    add hl, bc
-
-    ; Get bit to write
-    pop bc
-    push bc
-    ld c, b
-    push af
-.shift_loop:
-    ld a, c
-    or a
-    jr z, .shift_done
-    pop af
-    srl a
-    push af
-    dec c
-    jr .shift_loop
-.shift_done:
-    pop af
-    and $01
-
-    ; Set bit if needed
-    or a
-    jr z, .skip_set
-    ld a, [hl]
-    or $80
-    ld [hl], a
-.skip_set:
-
-    ; Increment bit position
-    inc de
-
-    pop bc
+    ; Check if bit count is 0
     ld a, b
     or a
+    ret z
+
+.write_bit_loop:
+    push bc
+    push de
+
+    ; Calculate byte offset: DE / 8
+    ld a, e
+    and $F8  ; Clear lower 3 bits
+    ld l, a
+    ld a, d
+    ld h, a
+    srl h
+    rr l
+    srl h
+    rr l
+    srl h
+    rr l  ; HL = byte offset
+
+    ; Add base address
+    push bc
+    ld bc, QR_BitBuf
+    add hl, bc
+    pop bc
+
+    ; Calculate bit position within byte: DE & 7
+    ld a, e
+    and $07
+    ld b, a  ; B = bit position (0-7)
+
+    ; Calculate bit mask: $80 >> bit_position
+    ld a, $80
+.shift_mask:
+    ld d, b
+    or a
+    jr z, .mask_done
+.shift_mask_loop:
+    dec d
+    jr z, .mask_done
+    srl a
+    jr .shift_mask_loop
+.mask_done:
+    ld d, a  ; D = bit mask
+
+    ; Get the bit from value (in C)
+    pop bc  ; Restore original B (bit count)
+    push bc
+    dec b    ; B-1 = bit index from left
+    ld a, c  ; Get value
+.extract_bit:
+    ld e, b
+    or a
+    jr z, .bit_extracted
+.extract_loop:
+    dec e
+    jr z, .bit_extracted
+    srl a
+    jr .extract_loop
+.bit_extracted:
+    and $01  ; A = bit value (0 or 1)
+
+    ; Set or clear bit in buffer
+    or a
+    jr z, .clear_bit
+    ; Set bit
+    ld a, [hl]
+    or d
+    ld [hl], a
+    jr .next_bit
+.clear_bit:
+    ; Clear bit
+    ld a, d
+    cpl
+    ld d, a
+    ld a, [hl]
+    and d
+    ld [hl], a
+
+.next_bit:
+    pop de
+    pop bc
+    inc de   ; Next bit position
+    dec b    ; Decrement bit count
     jr nz, .write_bit_loop
 
-    pop bc
-    pop hl
     ret
 
 ; ====================================================================
@@ -284,12 +324,12 @@ PadToByte:
     and $07
     ret z  ; Already aligned
 
+    ld b, a  ; Save bit offset
     ld a, 8
-    sub a
-    ld b, a  ; Bits to pad
-    xor a
-.pad_loop:
-    call .WriteBits
+    sub b
+    ld b, a  ; B = bits to pad
+    xor a    ; A = 0 (value to write)
+    call QR_WriteBits
     ret
 
 ; ====================================================================
@@ -345,7 +385,7 @@ BuildMatrix:
     ld hl, QR_Matrix
     ld bc, QR_V1_SIZE * QR_V1_SIZE
     xor a
-    call .FillBytes
+    call QR_FillBytes
 
     ; Place finder patterns (3 corners)
     call .PlaceFinderPatterns
@@ -421,7 +461,7 @@ BuildMatrix:
 .fp_white:
     xor a
 .fp_set:
-    call .SetModule
+    call SetModule
 
     pop de
     pop bc
@@ -449,7 +489,7 @@ BuildMatrix:
     ld e, b
     ld a, b
     and $01
-    call .SetModule
+    call SetModule
     inc b
     ld a, b
     cp 13
@@ -461,7 +501,7 @@ BuildMatrix:
     ld d, b
     ld a, b
     and $01
-    call .SetModule
+    call SetModule
     inc b
     ld a, b
     cp 13
@@ -497,7 +537,7 @@ BuildMatrix:
 
 .format_place:
     ld a, [hl]
-    call .SetModule
+    call SetModule
 
     pop bc
     pop hl
@@ -543,7 +583,7 @@ BuildMatrix:
     ; Calculate position (simplified)
     ld d, b
     ld e, b
-    call .SetModule
+    call SetModule
 
     pop bc
     sla c  ; Shift to next bit
@@ -559,7 +599,7 @@ BuildMatrix:
 ; ====================================================================
 ; Input:  D = row (0-20), E = col (0-20), A = value (0 or 1)
 ; ====================================================================
-.SetModule:
+SetModule:
     push hl
     push de
     push bc
@@ -626,7 +666,7 @@ ApplyMask:
     xor $01
     ld d, b
     ld e, c
-    call .SetModule
+    call SetModule
     pop bc
 
 .mask_skip:

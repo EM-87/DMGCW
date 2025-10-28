@@ -27,9 +27,9 @@ QRTooLongMsg:    DB "Datos exceden capacidad QR!",0
 
 ; --- Variables WRAM ---
 SECTION "QRVars", WRAM0[$CA00]
-QR_InputBuf:     DS QR_CAPACITY + 1
-QR_BitBuf:       DS QR_CAPACITY + QR_EC_SIZE
-QR_Matrix:       DS QR_MODULES
+QR_InputBuf::     DS QR_CAPACITY + 1
+QR_BitBuf::       DS QR_CAPACITY + QR_EC_SIZE
+QR_Matrix::       DS QR_MODULES
 
 ; ====================================================================
 ; Punto de Entrada y Flujo Principal
