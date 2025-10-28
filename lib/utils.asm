@@ -6,7 +6,6 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 ; Declarar variables globales que se usarán aquí
-EXTERN JoyState, JoyPrevState
 
 ; ------------------------------------------------------------
 ; CopyMemory: Copia BC bytes desde HL a DE

@@ -6,9 +6,6 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
 ; --- Declaraciones Externas ---
-EXTERN ReadJoypad, WaitButton, WaitVBlank, CopyString, StringLength, FillMemory
-EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY, UI_DrawBox
-EXTERN JoyState, PlayBeepNav, PlayBeepConfirm, PlayBeepError
 
 ; ====================================================================
 ; Punto de Entrada y Lógica Principal
@@ -161,11 +158,11 @@ Input_DrawUI:
     ld d, 8
     ld e, 9
     call UI_PrintAtXY
-    ld a, '<'
+    ld a, $3C  ; ASCII '<'
     ld d, 8
     ld e, 8
     call UI_PrintAtXY
-    ld a, '>'
+    ld a, $3E  ; ASCII '>'
     ld d, 8
     ld e, 10
     call UI_PrintAtXY

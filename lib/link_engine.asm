@@ -15,7 +15,6 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
 ; --- External dependencies ---
-EXTERN FrameCounter
 
 SECTION "LinkEngine", ROM0
 

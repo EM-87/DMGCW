@@ -67,7 +67,6 @@ PRINTER_TIMEOUT_SHORT  EQU 5000   ; Short timeout (~5000 cycles)
 PRINTER_TIMEOUT_LONG   EQU 30000  ; Long timeout for printing
 
 ; --- External dependencies ---
-EXTERN DelayFrames
 
 SECTION "PrinterComm", ROM0
 

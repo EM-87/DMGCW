@@ -6,11 +6,6 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
 ; --- Dependencias Externas ---
-EXTERN UI_ClearScreen, UI_DrawBox, UI_PrintInBox, UI_PrintStringAtXY
-EXTERN PlayBeepConfirm, PlayBeepError
-EXTERN AddressBuf, AmountBuf
-EXTERN CopyMemory, CopyString, FillMemory, StringLength
-EXTERN WaitButton, WaitVBlank, ReadJoypadWithDebounce, ReadJoypad
 
 ; ====================================================================
 ; Punto de Entrada y Lógica Principal

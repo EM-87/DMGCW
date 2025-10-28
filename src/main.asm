@@ -7,11 +7,6 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
 ; --- Declaración de funciones externas ---
-EXTERN CopyString, FillMemory, WaitButton, WaitVBlank, ReadJoypadWithDebounce, ReadJoypad
-EXTERN UI_ClearScreen, UI_DrawBox, UI_PrintInBox, UI_PrintStringAtXY, UI_PrintAtXY
-EXTERN InitSound, PlayBeepNav, PlayBeepConfirm
-EXTERN SRAM_Init
-EXTERN Entry_Input, Entry_Confirm, Entry_SRAM, Entry_LinkTest, Entry_QR_Gen, Entry_Printer
 
 ; ====================================================================
 ; Vectores de Interrupción y Entry Point
@@ -23,10 +18,14 @@ SECTION "VBlank", ROM0[$0040]
     jp VBlankHandler
 
 ; ... (otras interrupciones sin cambios) ...
-SECTION "LCDStat", ROM0[$0048], reti
-SECTION "Timer", ROM0[$0050], reti
-SECTION "Serial", ROM0[$0058], reti
-SECTION "Joypad", ROM0[$0060], reti
+SECTION "LCDStat", ROM0[$0048]
+    reti
+SECTION "Timer", ROM0[$0050]
+    reti
+SECTION "Serial", ROM0[$0058]
+    reti
+SECTION "Joypad", ROM0[$0060]
+    reti
 
 ; ====================================================================
 ; Código Principal
@@ -222,7 +221,7 @@ DrawMenu:
     ld a, [CursorIndex]
     cp b
     jr nz, .no_cursor
-    ld a, '>'
+    ld a, $3E  ; ASCII '>'
     ld e, 2
     call UI_PrintAtXY
 .no_cursor:

@@ -204,7 +204,7 @@ RS_MultiplyGF256:
     ret
 
 ; --- Datos ---
-SECTION "RS_Data", ROM1
+SECTION "RS_Data", ROMX, BANK[1]
 ; Coeficientes del polinomio generador para QR V1, Level L
 RS_Generator:
     DB $01, $19, $C4, $6A, $AC, $4D, $2F

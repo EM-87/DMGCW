@@ -6,11 +6,6 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
 ; --- Dependencias Externas ---
-EXTERN UI_ClearScreen, UI_DrawBox, UI_PrintInBox, UI_PrintStringAtXY
-EXTERN PlayBeepNav, PlayBeepError, PlayBeepConfirm
-EXTERN AddressBuf, QR_Matrix ; Buffers de datos globales
-EXTERN CopyMemory, CopyString, FillMemory, StringLength
-EXTERN WaitButton, WaitVBlank, ReadJoypadWithDebounce, ReadJoypad
 
 ; --- Constantes del Módulo ---
 PRINTER_INIT        EQU $01, PRINTER_PRINT EQU $02, PRINTER_DATA EQU $04, PRINTER_STATUS EQU $0F

@@ -18,7 +18,6 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
 ; --- External dependencies ---
-EXTERN QR_InputBuf, QR_BitBuf, QR_Matrix
 
 ; --- QR Constants ---
 QR_MODE_NUMERIC       EQU 1

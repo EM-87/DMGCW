@@ -11,13 +11,6 @@ LIST_MODE_SELECT    EQU 0
 LIST_MODE_DELETE    EQU 1
 
 ; --- Dependencias Externas ---
-EXTERN JoyState, CurrentWalletName, InputPromptAddr, InputDestBufAddr, InputMaxLen
-EXTERN PlayBeepNav, PlayBeepConfirm, PlayBeepError
-EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY
-EXTERN SRAM_GetWalletCount, SRAM_LoadWallet, SRAM_CreateWallet, SRAM_DeleteWallet, WALLET_NAME, WALLET_ADDR
-EXTERN Entry_Input
-EXTERN CopyMemory, CopyString, FillMemory, StringLength
-EXTERN WaitButton, WaitVBlank, ReadJoypadWithDebounce, ReadJoypad
 
 ; --- Variables WRAM ---
 SECTION "SramUIVars", WRAM0[$C300]
@@ -274,7 +267,7 @@ DrawMenuItem:
     ld a, [sram_menu_cursor_pos]
     cp [sp+2]
     jr nz, .no_cursor
-    ld a, '>'
+    ld a, $3E  ; ASCII '>'
     ld b, e
     dec b
     push de
@@ -313,7 +306,7 @@ DrawWalletList:
     ld a, [sram_list_cursor_pos]
     cp b
     jr nz, .no_cursor_list
-    ld a, '>'
+    ld a, $3E  ; ASCII '>'
     ld e, 1
     call UI_PrintAtXY
 .no_cursor_list:

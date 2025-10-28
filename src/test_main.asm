@@ -6,8 +6,6 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
 ; --- Dependencias Externas (utils.asm functions) ---
-EXTERN CopyMemory, CopyString, FillMemory, StringLength
-EXTERN WaitButton, WaitVBlank, ReadJoypadWithDebounce, ReadJoypad
 
 ; --- Variables WRAM para el Framework de Pruebas ---
 SECTION "TestVars", WRAM0[$C800]
@@ -23,10 +21,6 @@ JoyState:         DS 1
 JoyPrevState:     DS 1
 
 ; --- Variables Externas (módulos a probar) ---
-EXTERN SRAM_Init
-EXTERN SRAM_GetWalletCount, SRAM_CreateWallet, SRAM_LoadWallet, SRAM_DeleteWallet, WALLET_NAME, WALLET_ADDR
-EXTERN Input_Init, Input_AddChar, Input_Backspace, InputBuffer
-EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY
 
 ; ============================================================
 ; Test Runner Principal

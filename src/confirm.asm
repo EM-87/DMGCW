@@ -6,12 +6,6 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
 ; --- Declaraciones Externas ---
-EXTERN JoyState
-EXTERN WaitButton, ReadJoypadWithDebounce
-EXTERN PlayBeepConfirm, PlayBeepNav
-EXTERN UI_ClearScreen, UI_DrawBox, UI_PrintInBox, UI_PrintStringAtXY
-EXTERN SRAM_LogTransaction
-EXTERN AddressBuf, AmountBuf
 
 ; --- Datos y Mensajes ---
 SECTION "ConfirmData", ROM1

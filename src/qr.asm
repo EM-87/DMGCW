@@ -5,13 +5,8 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 ; --- Utilidades compartidas ---
-EXTERN CopyString, StringLength, WaitButton, WaitVBlank, CopyMemory
 
 ; --- Declaraciones Externas ---
-EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY
-EXTERN PlayBeepNav
-EXTERN AddressBuf, AmountBuf ; Buffers globales
-EXTERN RS_GenerateECC, EncodeAlphaNumeric, BuildMatrix, ApplyMask, GetModule ; <<<--- Lógica QR delegada
 
 ; --- Constantes QR (específicas del módulo) ---
 QR_MODULES EQU QR_SIZE * QR_SIZE
