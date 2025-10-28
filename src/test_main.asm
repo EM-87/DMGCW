@@ -23,8 +23,7 @@ JoyState:         DS 1
 JoyPrevState:     DS 1
 
 ; --- Variables Externas (módulos a probar) ---
-; <<<--- 3. ELIMINAR EXTERN DE FUNCIONES AHORA INCLUIDAS ---
-EXTERN InitSRAM
+EXTERN SRAM_Init
 EXTERN SRAM_GetWalletCount, SRAM_CreateWallet, SRAM_LoadWallet, SRAM_DeleteWallet, WALLET_NAME, WALLET_ADDR
 EXTERN Input_Init, Input_AddChar, Input_Backspace, InputBuffer
 EXTERN UI_ClearScreen, UI_PrintStringAtXY, UI_PrintAtXY
@@ -42,7 +41,7 @@ TestMain:
     xor a
     ld [TestsPassed], a
     ld [TestsFailed], a
-    call InitSRAM
+    call SRAM_Init
 
     ld hl, TestRunnerTitle
     ld d, 1
