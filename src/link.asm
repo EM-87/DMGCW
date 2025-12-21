@@ -12,7 +12,7 @@ INCLUDE "constants.inc"
 ; ====================================================================
 SECTION "LinkModule", ROMX[$5200], BANK[1]
 
-Entry_LinkTest:
+Entry_LinkTest::
     ld hl, AddressBuf
     ld a, [hl]
     or a
@@ -20,56 +20,56 @@ Entry_LinkTest:
 
     ; --- Flujo de Comunicación ---
     call LinkInit
-    ld hl, .connecting_msg
+    ld hl, LinkConnectingMsg
     call DrawLinkScreen
     call LinkDetect
     jr c, .connection_error
 
-    ld hl, .handshake_msg
+    ld hl, LinkHandshakeMsg
     call DrawLinkScreen
     call LinkHandshake
     jr c, .handshake_error
     ld a, 20
     call DelayFrames
 
-    ld hl, .transmitting_msg
+    ld hl, LinkTransmittingMsg
     call DrawLinkScreen
     call LinkTransmit
     jr c, .transmit_error
 
-    ld hl, .verifying_msg
+    ld hl, LinkVerifyingMsg
     call DrawLinkScreen
     call LinkVerify
     jr c, .verify_error
 
     ; --- Éxito ---
-    ld hl, .success_msg
+    ld hl, LinkSuccessMsg
     call DrawLinkScreen
     call PlayBeepConfirm
     jr .wait_exit
 
     ; --- Manejo de Errores ---
 .connection_error:
-    ld hl, .error_msg_conn
+    ld hl, LinkErrorConn
     call DrawLinkScreen
     jr .error_common
 .handshake_error:
-    ld hl, .error_msg_hand
+    ld hl, LinkErrorHand
     call DrawLinkScreen
     jr .error_common
 .transmit_error:
-    ld hl, .error_msg_tx
+    ld hl, LinkErrorTx
     call DrawLinkScreen
     jr .error_common
 .verify_error:
-    ld hl, .error_msg_verify
+    ld hl, LinkErrorVerify
     call DrawLinkScreen
     jr .error_common
 .error_common:
     call PlayBeepError
     jr .wait_exit
 .no_data:
-    ld hl, .no_data_msg
+    ld hl, LinkNoDataMsg
     call DrawLinkScreen
 
 .wait_exit:
@@ -304,16 +304,16 @@ LinkReceiveByte:
 ; ====================================================================
 SECTION "LinkStrings", ROMX, BANK[1]
 LinkTitle:         DB "CABLE LINK",0
-.connecting_msg:   DB "Conectando...",0
-.handshake_msg:    DB "Estableciendo protocolo...",0
-.transmitting_msg: DB "Transmitiendo datos...",0
-.verifying_msg:    DB "Verificando envio...",0
-.success_msg:      DB "Transmision completada!",0
-.error_msg_conn:   DB "Error: No se detecta conexion.",0
-.error_msg_hand:   DB "Error: Protocolo incompatible.",0
-.error_msg_tx:     DB "Error: Falla de transmision.",0
-.error_msg_verify: DB "Error: El receptor no verifico.",0
-.no_data_msg:      DB "No hay datos para enviar.",0
+LinkConnectingMsg:   DB "Conectando...",0
+LinkHandshakeMsg:    DB "Estableciendo protocolo...",0
+LinkTransmittingMsg: DB "Transmitiendo datos...",0
+LinkVerifyingMsg:    DB "Verificando envio...",0
+LinkSuccessMsg:      DB "Transmision completada!",0
+LinkErrorConn:       DB "Error: No se detecta conexion.",0
+LinkErrorHand:       DB "Error: Protocolo incompatible.",0
+LinkErrorTx:         DB "Error: Falla de transmision.",0
+LinkErrorVerify:     DB "Error: El receptor no verifico.",0
+LinkNoDataMsg:       DB "No hay datos para enviar.",0
 
 DrawLinkScreen:
     call UI_ClearScreen
@@ -333,6 +333,6 @@ DrawLinkScreen:
     ret
 
 ; --- Variables WRAM ---
-SECTION "LinkVars", WRAM0[$CD00]
+SECTION "LinkVars", WRAM0
 FrameCRC:     DS 1
 LinkTxBuffer: DS LINK_MAX_PAYLOAD + 1

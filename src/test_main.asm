@@ -8,7 +8,7 @@ INCLUDE "constants.inc"
 ; --- Dependencias Externas (utils.asm functions) ---
 
 ; --- Variables WRAM para el Framework de Pruebas ---
-SECTION "TestVars", WRAM0[$C800]
+SECTION "TestVars", WRAM0
 TestsPassed:      DS 1
 TestsFailed:      DS 1
 TestBuffer:       DS 32

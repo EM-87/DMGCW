@@ -21,7 +21,7 @@ QRNoDataMsg:     DB "No hay datos para QR!",0
 QRTooLongMsg:    DB "Datos exceden capacidad QR!",0
 
 ; --- Variables WRAM ---
-SECTION "QRVars", WRAM0[$CA00]
+SECTION "QRVars", WRAM0
 QR_InputBuf::     DS QR_CAPACITY + 1
 QR_BitBuf::       DS QR_CAPACITY + QR_EC_SIZE
 QR_Matrix::       DS QR_MODULES
@@ -31,7 +31,7 @@ QR_Matrix::       DS QR_MODULES
 ; ====================================================================
 SECTION "QRModule", ROMX[$5000], BANK[1]
 
-Entry_QR_Gen:
+Entry_QR_Gen::
     call UI_ClearScreen
     ld hl, QRGeneratingMsg
     ld d, 8

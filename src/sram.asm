@@ -13,7 +13,7 @@ LIST_MODE_DELETE    EQU 1
 ; --- Dependencias Externas ---
 
 ; --- Variables WRAM ---
-SECTION "SramUIVars", WRAM0[$C300]
+SECTION "SramUIVars", WRAM0
     sram_menu_cursor_pos:   DS 1
     sram_wallet_count:      DS 1
     sram_list_cursor_pos:   DS 1
@@ -45,7 +45,7 @@ MsgSelected: DB "Wallet seleccionado.",0
 ; ====================================================================
 SECTION "SramMenuCode", ROMX, BANK[1]
 
-Entry_SRAM:
+Entry_SRAM::
     xor a
     ld [sram_menu_cursor_pos], a
 .loop_menu:

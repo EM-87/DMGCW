@@ -17,7 +17,7 @@ SECTION "InputModule", ROMX, BANK[1]
 ;   - InputPromptAddr: Puntero a la cadena de prompt.
 ;   - InputDestBufAddr: Puntero al buffer de destino.
 ;   - InputMaxLen: Longitud máxima del buffer.
-Entry_Input:
+Entry_Input::
     call Input_Init
 .input_loop:
     call Input_DrawUI
@@ -207,9 +207,9 @@ Charset: DB "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
 CharsetLen EQU 39  ; Length of charset string
 InputInstructions: DB "A:Anadir B:Borrar Start:Confirmar",0
 
-SECTION "InputVars", WRAM0[$C200]
+SECTION "InputVars", WRAM0
 InputCursorPos:   DS 1
 InputLen:         DS 1
-InputPromptAddr:  DS 2 ; Puntero a la cadena de prompt
-InputDestBufAddr: DS 2 ; Puntero al buffer de destino
-InputMaxLen:      DS 1 ; Longitud máxima del buffer
+InputPromptAddr::  DS 2 ; Puntero a la cadena de prompt
+InputDestBufAddr:: DS 2 ; Puntero al buffer de destino
+InputMaxLen::      DS 1 ; Longitud máxima del buffer

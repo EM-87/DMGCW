@@ -32,7 +32,7 @@ NR51 EQU rNR51  ; $FF25 - Selección de salida de canales
 NR52 EQU rNR52  ; $FF26 - Control activación/desactivación de sonido
 
 ; --- Inicialización del sistema de sonido ---
-InitSound:
+InitSound::
     ; Encender sistema de sonido
     ld a, $80
     ld [NR52], a
@@ -65,7 +65,7 @@ InitSound:
 
 ; PlayBeepNav: Sonido para navegación de menú (click suave)
 ; Utiliza Canal 1 (onda cuadrada)
-PlayBeepNav:
+PlayBeepNav::
     push af
     
     ; Desactivar sweep
@@ -91,7 +91,7 @@ PlayBeepNav:
 
 ; PlayBeepConfirm: Sonido para confirmación (beep ascendente)
 ; Utiliza Canal 2 (onda cuadrada)
-PlayBeepConfirm:
+PlayBeepConfirm::
     push af
     
     ; Longitud y duty cycle (50%)
@@ -130,7 +130,7 @@ PlayBeepConfirm:
 
 ; PlayBeepError: Sonido para errores (beep descendente)
 ; Utiliza Canal 4 (ruido)
-PlayBeepError:
+PlayBeepError::
     push af
     push bc
     

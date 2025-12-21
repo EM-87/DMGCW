@@ -35,7 +35,8 @@ PrinterError:     DB "Error impresora.",0
 NoDataMsg:          DB "No hay datos para imprimir.",0
 
 ; --- Variables WRAM ---
-SECTION "PrinterVars", WRAM0[$CC00]
+; PrinterVars moved to WRAMX due to size (1686 bytes) and address conflict
+SECTION "PrinterVars", WRAMX, BANK[1]
 PrinterPacket:      DS DATA_PACKET_SIZE + HEADER_SIZE + FOOTER_SIZE
 PrinterResponse:    DS 16
 PrintBuffer:        DS QR_TILES_WIDTH * QR_TILES_HEIGHT * 16
@@ -45,12 +46,12 @@ PrintBuffer:        DS QR_TILES_WIDTH * QR_TILES_HEIGHT * 16
 ; ====================================================================
 SECTION "PrinterModule", ROMX[$5800], BANK[1]
 
-Entry_Printer:
+Entry_Printer::
     ld hl, AddressBuf
     ld a, [hl]
     or a
     jr z, .no_data
-    ld hl, .preparing
+    ld hl, PrinterPreparing
     call DrawPrinterScreen
     call InitPrinterComm
     jr c, .comm_error
@@ -61,12 +62,12 @@ Entry_Printer:
     jr c, .comm_error
     call PrinterSendPrint
     jr c, .comm_error
-    ld hl, .success_msg
+    ld hl, PrinterSuccess
     call DrawPrinterScreen
     call PlayBeepConfirm
     jr .wait_exit
 .comm_error:
-    ld hl, .error_msg
+    ld hl, PrinterError
     call DrawPrinterScreen
     call PlayBeepError
 .wait_exit:
@@ -74,7 +75,7 @@ Entry_Printer:
     call WaitButton
     ret
 .no_data:
-    ld hl, .no_data_msg
+    ld hl, NoDataMsg
     call DrawPrinterScreen
     ld a, (1 << BUTTON_B_BIT)
     call WaitButton

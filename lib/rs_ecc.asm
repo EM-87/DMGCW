@@ -257,6 +257,6 @@ RS_GFAntiLog::
     DB  44,  88, 176, 125, 250, 233, 207, 131,  27,  54, 108, 216, 173,  71, 142,   1
 
 ; --- Variables en RAM ---
-SECTION "RS_Vars", WRAM0[$CB00]
+SECTION "RS_Vars", WRAM0
 RS_Buffer:   DS RS_GENERATOR_SIZE
 RS_DataLen:  DS 1

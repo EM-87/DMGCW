@@ -23,7 +23,7 @@ CancelMsg:          DB "TX Cancelada",0
 ; ====================================================================
 SECTION "ConfirmModule", ROMX[$4500], BANK[1]
 
-Entry_Confirm:
+Entry_Confirm::
     ; Verificar que haya datos en los buffers de entrada
     ld hl, AddressBuf
     ld a, [hl]

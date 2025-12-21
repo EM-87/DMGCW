@@ -6,6 +6,9 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
+; --- Constantes del módulo ---
+MENU_ITEMS EQU 7  ; Number of menu items (0-6)
+
 ; --- Declaración de funciones externas ---
 
 ; ====================================================================
@@ -283,7 +286,7 @@ DrawMenu:
 ; ====================================================================
 ; Variables Globales y Buffers Compartidos
 ; ====================================================================
-SECTION "MainVars", WRAM0[$C000]
+SECTION "MainVars", WRAM0
 CursorIndex::     DS 1
 JoyState::        DS 1
 JoyPrevState::    DS 1
@@ -291,7 +294,7 @@ CurrentBank::     DS 1
 EntryReason::     DS 1
 FrameCounter::    DS 1
 
-SECTION "SharedBuffers", WRAM0[$C100]
+SECTION "SharedBuffers", WRAM0
 AddressBuf::      DS 24
 AmountBuf::       DS 10
 CurrentWalletName:: DS WALLET_NAME_LEN
