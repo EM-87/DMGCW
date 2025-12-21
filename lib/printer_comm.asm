@@ -24,6 +24,9 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
+SECTION "Printer_commCode", ROM0
+
+
 ; --- Printer Protocol Constants ---
 PRINTER_MAGIC_1        EQU $88  ; Sync byte 1
 PRINTER_MAGIC_2        EQU $33  ; Sync byte 2
@@ -78,7 +81,7 @@ SECTION "PrinterComm", ROM0
 ;         A = status byte if successful
 ; Modifies: AF, BC, DE, HL
 ; ====================================================================
-Printer_Init:
+Printer_Init::
     ; Reset serial port
     xor a
     ld [rSB], a
@@ -107,7 +110,7 @@ Printer_Init:
 ;         DE = response status
 ; Modifies: AF, BC, DE, HL
 ; ====================================================================
-Printer_SendCommand:
+Printer_SendCommand::
     push hl
     push bc
     push af
@@ -359,7 +362,7 @@ Printer_SendCommand:
 ; Output: Carry set on error
 ; Modifies: AF, BC, DE, HL
 ; ====================================================================
-Printer_SendData:
+Printer_SendData::
     ld a, PRINTER_CMD_DATA
     ld bc, PRINTER_MAX_DATA
     call Printer_SendCommand
@@ -374,7 +377,7 @@ Printer_SendData:
 ; Output: Carry set on error
 ; Modifies: AF, BC, DE, HL
 ; ====================================================================
-Printer_Print:
+Printer_Print::
     push af
     push bc
 
@@ -406,7 +409,7 @@ Printer_Print:
 ; Output: A = status byte, Carry set on error
 ; Modifies: AF, BC, DE, HL
 ; ====================================================================
-Printer_GetStatus:
+Printer_GetStatus::
     ld a, PRINTER_CMD_STATUS
     ld bc, 0
     call Printer_SendCommand
@@ -419,7 +422,7 @@ Printer_GetStatus:
 ; Output: Carry set on timeout, A = last status
 ; Modifies: AF, BC, DE, HL
 ; ====================================================================
-Printer_WaitReady:
+Printer_WaitReady::
     ld c, b  ; Save max attempts
 
 .wait_loop:
@@ -463,7 +466,7 @@ Printer_WaitReady:
 ;
 ; Converts Game Boy tilemap + tile data to printer-ready format
 ; ====================================================================
-Printer_ConvertTileMap:
+Printer_ConvertTileMap::
     ; This is a complex conversion
     ; Game Boy: 8x8 tiles, 2bpp
     ; Printer: 160 dots wide, 2bpp strips

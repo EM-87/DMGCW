@@ -7,11 +7,13 @@ INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 ; Declarar variables globales que se usarán aquí
 
+SECTION "UtilsCode", ROM0
+
 ; ------------------------------------------------------------
 ; CopyMemory: Copia BC bytes desde HL a DE
 ; Entradas: HL = origen, DE = destino, BC = cantidad
 ; ------------------------------------------------------------
-CopyMemory:
+CopyMemory::
     push af
     push bc
     push de
@@ -37,7 +39,7 @@ CopyMemory:
 ; Garantiza un terminador nulo y respeta el límite de BC.
 ; Entradas: HL = puntero source, DE = puntero dest, BC = límite
 ; ------------------------------------------------------------
-CopyString:
+CopyString::
     push af
     push bc
     push de
@@ -74,7 +76,7 @@ CopyString:
 ; FillMemory: Llena un bloque de memoria con un valor
 ; Entradas: HL = puntero, BC = cantidad, A = valor
 ; ------------------------------------------------------------
-FillMemory:
+FillMemory::
     push bc
     push hl
     ld d, a ; Guardar el valor a rellenar para no perderlo en el bucle
@@ -97,13 +99,15 @@ FillMemory:
 ; Entradas: HL = puntero a la cadena
 ; Salida: A = longitud
 ; ------------------------------------------------------------
-StringLength:
+StringLength::
     push hl
     xor a ; Contador de longitud
 .loop:
-    ld d, [hl+]
-    or d
+    ld d, a          ; Save counter
+    ld a, [hl+]      ; Load character
+    or a             ; Check if zero
     jr z, .done_len
+    ld a, d          ; Restore counter
     inc a
     jr .loop
 .done_len:
@@ -114,7 +118,7 @@ StringLength:
 ; WaitButton: Espera la pulsación Y LIBERACIÓN de un botón.
 ; Entradas: A = Máscara del botón (ej. BUTTON_A_BIT)
 ; ------------------------------------------------------------
-WaitButton:
+WaitButton::
     push bc
     ld b, a ; Guardar la máscara del botón en B
 .wait_press:
@@ -135,7 +139,7 @@ WaitButton:
 ; ------------------------------------------------------------
 ; WaitVBlank: Espera a la próxima interrupción VBlank de forma segura.
 ; ------------------------------------------------------------
-WaitVBlank:
+WaitVBlank::
     push af
 .wait:
     ld a, [rLY]
@@ -148,7 +152,7 @@ WaitVBlank:
 ; ReadJoypadWithDebounce: Lee el joypad con debounce.
 ; Esta es la implementación completa y correcta.
 ; ------------------------------------------------------------
-ReadJoypadWithDebounce:
+ReadJoypadWithDebounce::
     call ReadJoypad
     ld a, [JoyState]
     ld b, a
@@ -174,7 +178,7 @@ ReadJoypadWithDebounce:
 ; ------------------------------------------------------------
 ; ReadJoypad: Lectura de bajo nivel del registro P1.
 ; ------------------------------------------------------------
-ReadJoypad:
+ReadJoypad::
     push bc
     ; Leer cruceta (P14=1)
     ld a, P1F_GET_DPAD

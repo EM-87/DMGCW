@@ -2,6 +2,9 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
+SECTION "Rs_eccCode", ROM0
+
+
 ; --- Constantes ---
 ; Polinomio generador para QR version 1, level L (7 bytes)
 RS_GENERATOR_SIZE EQU 7
@@ -11,7 +14,7 @@ RS_GENERATOR_SIZE EQU 7
 ; RS_GenerateECC: Genera bytes de corrección de errores Reed-Solomon
 ; Entrada: HL = puntero a datos, B = longitud
 ; Salida: DE = puntero a buffer de ECC (RS_GENERATOR_SIZE bytes)
-RS_GenerateECC:
+RS_GenerateECC::
     push af
     push bc
     push hl
@@ -73,7 +76,7 @@ RS_GenerateECC:
 
 ; RS_MultiplyGenerator: Multiplica ECC actual por el polinomio generador
 ; Entrada: C = byte líder
-RS_MultiplyGenerator:
+RS_MultiplyGenerator::
     push af
     push bc
     push de
@@ -138,7 +141,7 @@ RS_MultiplyGenerator:
 ; RS_MultiplyGF256: Multiplica dos bytes en campo de Galois GF(256)
 ; Entrada: H, L = operandos
 ; Salida: L = resultado
-RS_MultiplyGF256:
+RS_MultiplyGF256::
     push af
     push bc
     push de
@@ -206,7 +209,7 @@ RS_MultiplyGF256:
 ; --- Datos ---
 SECTION "RS_Data", ROMX, BANK[1]
 ; Coeficientes del polinomio generador para QR V1, Level L
-RS_Generator:
+RS_Generator::
     DB $01, $19, $C4, $6A, $AC, $4D, $2F
 
 ; Tablas de logaritmos y antilogaritmos para GF(256)
@@ -214,7 +217,7 @@ RS_Generator:
 ; usando el polinomio primitivo x^8 + x^4 + x^3 + x^2 + 1
 
 ; Log base (α=2) para GF(256)
-RS_GFLog:
+RS_GFLog::
     ; 256 bytes: índice -> logaritmo
     DB 0,   0,   1,  25,   2,  50,  26, 198,   3, 223,  51, 238,  27, 104, 199,  75
     DB 4, 100, 224,  14,  52, 141, 239, 129,  28, 193, 105, 248, 200,   8,  76, 113
@@ -234,7 +237,7 @@ RS_GFLog:
     DB 79, 174, 213, 233, 230, 231, 173, 232, 116, 214, 244, 234, 168,  80,  88, 175
 
 ; Antilogaritmo: 2^n en GF(256)
-RS_GFAntiLog:
+RS_GFAntiLog::
     ; 256 bytes: logaritmo -> valor
     DB   1,   2,   4,   8,  16,  32,  64, 128,  29,  58, 116, 232, 205, 135,  19,  38
     DB  76, 152,  45,  90, 180, 117, 234, 201, 143,   3,   6,  12,  24,  48,  96, 192

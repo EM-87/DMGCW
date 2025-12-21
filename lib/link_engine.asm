@@ -14,6 +14,9 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
+SECTION "Link_engineCode", ROM0
+
+
 ; --- External dependencies ---
 
 SECTION "LinkEngine", ROM0
@@ -25,7 +28,7 @@ SECTION "LinkEngine", ROM0
 ; Output: None
 ; Modifies: AF, B
 ; ====================================================================
-DelayFrames:
+DelayFrames::
     or a
     ret z  ; Return if 0 frames
 
@@ -58,7 +61,7 @@ DelayFrames:
 ;
 ; Sends several null bytes to clear any pending data in the serial buffer
 ; ====================================================================
-Link_FlushSerial:
+Link_FlushSerial::
     push bc
 
     ; Reset serial control
@@ -111,7 +114,7 @@ Link_FlushSerial:
 ; Output: Carry set if timeout, clear if ready
 ; Modifies: AF, BC
 ; ====================================================================
-Link_WaitReady:
+Link_WaitReady::
     ld bc, TIMEOUT_LONG
 
 .wait_loop:
@@ -140,7 +143,7 @@ Link_WaitReady:
 ; Output: A = received byte, Carry set on timeout
 ; Modifies: AF, BC
 ; ====================================================================
-Link_SendByteRaw:
+Link_SendByteRaw::
     ld [rSB], a
     ld a, $81  ; Start transfer with external clock
     ld [rSC], a
@@ -173,7 +176,7 @@ Link_SendByteRaw:
 ; Output: A = received byte, Carry set on timeout
 ; Modifies: AF, BC
 ; ====================================================================
-Link_ReceiveByteRaw:
+Link_ReceiveByteRaw::
     ; Send dummy byte to initiate transfer
     xor a
     ld [rSB], a
@@ -210,7 +213,7 @@ Link_ReceiveByteRaw:
 ;
 ; Uses CRC-16-CCITT polynomial: 0x1021
 ; ====================================================================
-Link_ComputeCRC16:
+Link_ComputeCRC16::
     ld d, 0
     ld e, 0  ; Initialize CRC to 0
 
@@ -256,7 +259,7 @@ Link_ComputeCRC16:
 ; Output: Zero flag set if CRC matches
 ; Modifies: AF, BC, DE, HL
 ; ====================================================================
-Link_VerifyCRC16:
+Link_VerifyCRC16::
     push de  ; Save expected CRC
     call Link_ComputeCRC16
 
@@ -280,7 +283,7 @@ Link_VerifyCRC16:
 ; Output: None
 ; Modifies: AF
 ; ====================================================================
-Link_InitPort:
+Link_InitPort::
     ; Disable serial interrupts
     ld a, [rIE]
     and ~(1 << 3)  ; Clear bit 3 (serial interrupt)
@@ -304,7 +307,7 @@ Link_InitPort:
 ; Output: None
 ; Modifies: AF
 ; ====================================================================
-Link_ClosePort:
+Link_ClosePort::
     xor a
     ld [rSB], a
     ld [rSC], a
@@ -317,7 +320,7 @@ Link_ClosePort:
 ; Output: A = received byte, Carry set on failure
 ; Modifies: AF, BC
 ; ====================================================================
-Link_Exchange:
+Link_Exchange::
     push bc
 
 .retry_loop:
@@ -362,7 +365,7 @@ Link_Exchange:
 ; ====================================================================
 SECTION "LinkEngineData", ROM0
 
-Link_ErrorStrings:
+Link_ErrorStrings::
     DB "OK",0
     DB "Timeout",0
     DB "Retry exceeded",0

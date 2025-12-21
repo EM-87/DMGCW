@@ -23,19 +23,27 @@ SECTION "SramUIVars", WRAM0[$C300]
     NewWalletAddrBuffer:    DS WALLET_ADDR_LEN + 1
 
 ; --- Strings ---
-SECTION "SramStrings", ROM1
+SECTION "SramStrings", ROMX, BANK[1]
 SramMenuTitle:       DB "Gestion de Wallets",0
-MenuOptionCreate:    DB "Crear Wallet",0, MenuOptionSelect: DB "Seleccionar Wallet",0, MenuOptionDelete: DB "Eliminar Wallet",0, MenuOptionBack: DB "Volver",0
-CreateNamePrompt:    DB "Nombre wallet:",0, CreateAddrPrompt: DB "Direccion wallet:",0
-NoWalletsMsg:        DB "No hay wallets.",0, LimitErrorMsg: DB "Limite de wallets.",0
-ListTitleSelect:     DB "Seleccionar Wallet",0, ListTitleDelete: DB "Eliminar Wallet",0
+MenuOptionCreate:    DB "Crear Wallet",0
+MenuOptionSelect: DB "Seleccionar Wallet",0
+MenuOptionDelete: DB "Eliminar Wallet",0
+MenuOptionBack: DB "Volver",0
+CreateNamePrompt:    DB "Nombre wallet:",0
+CreateAddrPrompt: DB "Direccion wallet:",0
+NoWalletsMsg:        DB "No hay wallets.",0
+LimitErrorMsg: DB "Limite de wallets.",0
+ListTitleSelect:     DB "Seleccionar Wallet",0
+ListTitleDelete: DB "Eliminar Wallet",0
 ConfirmDeletePrompt: DB "Borrar? A=Si B=No",0
-MsgCreated:          DB "Wallet creado.",0, MsgDeleted: DB "Wallet eliminado.",0, MsgSelected: DB "Wallet seleccionado.",0
+MsgCreated:          DB "Wallet creado.",0
+MsgDeleted: DB "Wallet eliminado.",0
+MsgSelected: DB "Wallet seleccionado.",0
 
 ; ====================================================================
 ; Entry Point y Lógica del Menú Principal
 ; ====================================================================
-SECTION "SramMenuCode", ROM1
+SECTION "SramMenuCode", ROMX, BANK[1]
 
 Entry_SRAM:
     xor a
@@ -147,7 +155,8 @@ WalletList_Show:
     pop hl
     ld de, WALLET_NAME
 .copy_name:
-    ld a, [de+]
+    ld a, [de]
+    inc de
     ld [hl+], a
     or a
     jr nz, .copy_name
@@ -180,7 +189,9 @@ WalletList_Show:
     jr z, .list_wrap_bot
     dec a
     jr .list_upd
-.list_wrap_bot: ld a, [sram_wallet_count], dec a
+.list_wrap_bot:
+    ld a, [sram_wallet_count]
+    dec a
 .list_upd:
     ld [sram_list_cursor_pos], a
     call PlayBeepNav
@@ -263,9 +274,10 @@ DrawSramMenu:
     call DrawMenuItem
     ret
 DrawMenuItem:
-    push af
+    push bc
+    ld b, a          ; Save menu item index in B
     ld a, [sram_menu_cursor_pos]
-    cp [sp+2]
+    cp b
     jr nz, .no_cursor
     ld a, $3E  ; ASCII '>'
     ld b, e
@@ -276,7 +288,7 @@ DrawMenuItem:
     pop de
 .no_cursor:
     call UI_PrintStringAtXY
-    pop af
+    pop bc
     ret
 
 DrawWalletList:
@@ -292,7 +304,8 @@ DrawWalletList:
     ld d, 2
     ld e, 2
     call UI_PrintStringAtXY
-    ld c, [sram_wallet_count]
+    ld a, [sram_wallet_count]
+    ld c, a
     ld hl, sram_wallet_names_buffer
     xor b
 .loop_draw:

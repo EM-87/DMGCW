@@ -10,7 +10,7 @@ INCLUDE "constants.inc"
 ; ====================================================================
 ; Punto de Entrada y Lógica Principal
 ; ====================================================================
-SECTION "InputModule", ROM1
+SECTION "InputModule", ROMX, BANK[1]
 
 ; Entry_Input: Un teclado virtual genérico.
 ; Entradas (a través de variables globales WRAM para evitar registros):
@@ -25,8 +25,10 @@ Entry_Input:
     ld a, [JoyState]
     ld b, a
     ld a, [JoyPrevState]
-    cp b, jr z, .input_loop
-    ld a, b, ld [JoyPrevState], a
+    cp b
+    jr z, .input_loop
+    ld a, b
+    ld [JoyPrevState], a
 
     bit BUTTON_LEFT_BIT, b
     jr nz, .handle_left
@@ -97,15 +99,23 @@ Input_Init:
     ret
 
 Input_AddChar: ; Entrada: A = caracter a añadir
-    ld hl, [InputDestBufAddr]
+    push af          ; Save character
+    ; Load InputDestBufAddr into HL
+    ld a, [InputDestBufAddr]
+    ld l, a
+    ld a, [InputDestBufAddr+1]
+    ld h, a
+    ; Add offset
     ld a, [InputLen]
     ld c, a
     ld b, 0
     add hl, bc
-    ld a, [sp+2]
+    ; Store character
+    pop af
     ld [hl+], a
     xor a
     ld [hl], a
+    ; Increment length
     ld hl, InputLen
     inc [hl]
     ret
@@ -114,24 +124,34 @@ Input_Backspace:
     ld a, [InputLen]
     or a
     ret z
-    dec [InputLen]
+    ; Decrement length
+    ld hl, InputLen
+    dec [hl]
+    ; Load InputDestBufAddr into HL
+    ld a, [InputDestBufAddr]
+    ld l, a
+    ld a, [InputDestBufAddr+1]
+    ld h, a
+    ; Add offset
     ld a, [InputLen]
     ld c, a
     ld b, 0
-    ld hl, [InputDestBufAddr]
     add hl, bc
+    ; Clear character
     xor a
     ld [hl], a
     ret
 
 GetCharsetFromIndex: ; Entrada: A = índice, Salida: A = caracter
-    push hl, bc
+    push hl
+    push bc
     ld hl, Charset
     ld b, 0
     ld c, a
     add hl, bc
     ld a, [hl]
-    pop bc, hl
+    pop bc
+    pop hl
     ret
 
 ; --- Rutina de Dibujo ---
@@ -143,12 +163,18 @@ Input_DrawUI:
     ld d, 16
     call UI_DrawBox
     ; Prompt
-    ld hl, [InputPromptAddr]
+    ld a, [InputPromptAddr]
+    ld l, a
+    ld a, [InputPromptAddr+1]
+    ld h, a
     ld d, 3
     ld e, 2
     call UI_PrintStringAtXY
     ; Buffer de entrada
-    ld hl, [InputDestBufAddr]
+    ld a, [InputDestBufAddr]
+    ld l, a
+    ld a, [InputDestBufAddr+1]
+    ld h, a
     ld d, 5
     ld e, 2
     call UI_PrintStringAtXY
@@ -176,13 +202,14 @@ Input_DrawUI:
 ; ====================================================================
 ; Datos y Variables
 ; ====================================================================
-SECTION "InputData", ROM1
-Charset: DB "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.", CharsetLen EQU $-Charset
-InputInstructions: DB "A:Anadir B:Borrar",0, "Start:Confirmar",0
+SECTION "InputData", ROMX, BANK[1]
+Charset: DB "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
+CharsetLen EQU 39  ; Length of charset string
+InputInstructions: DB "A:Anadir B:Borrar Start:Confirmar",0
 
 SECTION "InputVars", WRAM0[$C200]
 InputCursorPos:   DS 1
 InputLen:         DS 1
-InputPromptAddr:  DW 1 ; Puntero a la cadena de prompt
-InputDestBufAddr: DW 1 ; Puntero al buffer de destino
-InputMaxLen:      DB 1 ; Longitud máxima del buffer
+InputPromptAddr:  DS 2 ; Puntero a la cadena de prompt
+InputDestBufAddr: DS 2 ; Puntero al buffer de destino
+InputMaxLen:      DS 1 ; Longitud máxima del buffer

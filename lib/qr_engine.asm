@@ -17,6 +17,9 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
+SECTION "Qr_engineCode", ROM0
+
+
 ; --- External dependencies ---
 
 ; --- QR Constants ---
@@ -41,7 +44,7 @@ SECTION "QREngine", ROM0
 ;         QR_BitBuf contains encoded data
 ; Modifies: AF, BC, DE, HL
 ; ====================================================================
-EncodeAlphaNumeric:
+EncodeAlphaNumeric::
     push hl
 
     ; Count string length
@@ -152,7 +155,7 @@ EncodeAlphaNumeric:
 ; Input:  HL = string pointer
 ; Output: C = length
 ; ====================================================================
-QR_CountLength:
+QR_CountLength::
     ld c, 0
 .count_loop:
     ld a, [hl+]
@@ -165,7 +168,7 @@ QR_CountLength:
 ; Helper: Fill bytes with value A
 ; Input:  HL = dest, BC = count, A = value
 ; ====================================================================
-QR_FillBytes:
+QR_FillBytes::
     push af  ; Save fill value
 .fill_loop:
     ld a, b
@@ -185,7 +188,7 @@ QR_FillBytes:
 ; Input:  A = character
 ; Output: A = value (0-44), Carry set if invalid
 ; ====================================================================
-QR_GetAlphaValue:
+QR_GetAlphaValue::
     push hl
     push bc
     ld b, a
@@ -217,7 +220,7 @@ QR_GetAlphaValue:
 ;         QR_BitBuf = target buffer
 ; Output: DE = updated bit position
 ; ====================================================================
-QR_WriteBits:
+QR_WriteBits::
     ; Save value to write
     ld c, a
 
@@ -317,7 +320,7 @@ QR_WriteBits:
 ; Input:  DE = current bit position
 ; Output: DE = padded bit position
 ; ====================================================================
-PadToByte:
+PadToByte::
     ; Round up to next multiple of 8
     ld a, e
     and $07
@@ -337,7 +340,7 @@ PadToByte:
 ; Input:  None (uses QR_BitBuf)
 ; Output: None
 ; ====================================================================
-PadDataBytes:
+PadDataBytes::
     ld hl, QR_BitBuf
     ld a, QR_V1_CAPACITY
 
@@ -379,7 +382,7 @@ PadDataBytes:
 ; Input:  QR_BitBuf contains data+ECC
 ; Output: QR_Matrix contains QR code
 ; ====================================================================
-BuildMatrix:
+BuildMatrix::
     ; Clear matrix
     ld hl, QR_Matrix
     ld bc, QR_V1_SIZE * QR_V1_SIZE
@@ -598,7 +601,7 @@ BuildMatrix:
 ; ====================================================================
 ; Input:  D = row (0-20), E = col (0-20), A = value (0 or 1)
 ; ====================================================================
-SetModule:
+SetModule::
     push hl
     push de
     push bc
@@ -637,7 +640,7 @@ SetModule:
 ; ====================================================================
 ; Input:  A = mask pattern (0-7)
 ; ====================================================================
-ApplyMask:
+ApplyMask::
     ; Mask 0: (row + col) mod 2 == 0
     ld b, 0  ; Row
 .mask_row:
@@ -687,7 +690,7 @@ ApplyMask:
 ; Input:  D = row (0-20), E = col (0-20)
 ; Output: A = module value (0 or 1)
 ; ====================================================================
-GetModule:
+GetModule::
     push hl
     push de
     push bc

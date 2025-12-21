@@ -8,7 +8,7 @@ INCLUDE "constants.inc"
 ; --- Declaraciones Externas ---
 
 ; --- Datos y Mensajes ---
-SECTION "ConfirmData", ROM1
+SECTION "ConfirmData", ROMX, BANK[1]
 ConfirmTitle:       DB "CONFIRMAR TX",0
 AddressLabel:       DB "Direccion:",0
 AmountLabel:        DB "Monto:",0
@@ -21,7 +21,7 @@ CancelMsg:          DB "TX Cancelada",0
 ; ====================================================================
 ; Punto de Entrada y Lógica Principal
 ; ====================================================================
-SECTION "ConfirmModule", ROM1[$4500]
+SECTION "ConfirmModule", ROMX[$4500], BANK[1]
 
 Entry_Confirm:
     ; Verificar que haya datos en los buffers de entrada

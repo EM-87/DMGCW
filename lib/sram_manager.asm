@@ -2,11 +2,14 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
+SECTION "Sram_managerCode", ROM0
+
+
 ; --- API pública ---
 
 ; SRAM_Init: Inicializa SRAM si es necesario y verifica integridad
 ; Salida: A = 0 si ok, 1 si se reinició SRAM
-SRAM_Init:
+SRAM_Init::
     push bc
     push de
     push hl
@@ -42,7 +45,7 @@ SRAM_Init:
 
 ; SRAM_VerifyChecksum: Verifica integridad de SRAM
 ; Salida: Z=1 si ok, Z=0 si falla
-SRAM_VerifyChecksum:
+SRAM_VerifyChecksum::
     push bc
     push hl
     
@@ -63,7 +66,7 @@ SRAM_VerifyChecksum:
 
 ; SRAM_ComputeChecksum: Calcular el checksum XOR
 ; Salida: A = checksum calculado
-SRAM_ComputeChecksum:
+SRAM_ComputeChecksum::
     push bc
     push de
     push hl
@@ -89,7 +92,7 @@ SRAM_ComputeChecksum:
     ret
 
 ; SRAM_Reset: Inicializa SRAM a valores por defecto
-SRAM_Reset:
+SRAM_Reset::
     push af
     push bc
     push de
@@ -139,7 +142,7 @@ SRAM_Reset:
 
 ; SRAM_GetTxCount: Obtiene número de transacciones
 ; Salida: A = número de transacciones
-SRAM_GetTxCount:
+SRAM_GetTxCount::
     push bc
     push de
     push hl
@@ -165,7 +168,7 @@ SRAM_GetTxCount:
 
 ; SRAM_GetWalletCount: Obtiene número de wallets activos
 ; Salida: A = número de wallets
-SRAM_GetWalletCount:
+SRAM_GetWalletCount::
     push bc
     push de
     push hl
@@ -192,7 +195,7 @@ SRAM_GetWalletCount:
 ; SRAM_LoadWallet: Carga datos de wallet por índice
 ; Entrada: A = índice wallet (0-based)
 ; Salida: Datos en buffers WALLET_NAME y WALLET_ADDR, A=0 si éxito
-SRAM_LoadWallet:
+SRAM_LoadWallet::
     push bc
     push de
     push hl
@@ -260,7 +263,7 @@ SRAM_LoadWallet:
 ; Entrada: A = índice wallet (0-based)
 ;          WALLET_NAME y WALLET_ADDR contienen los datos
 ; Salida: A=0 si éxito
-SRAM_SaveWallet:
+SRAM_SaveWallet::
     push bc
     push de
     push hl
@@ -293,7 +296,8 @@ SRAM_SaveWallet:
     
     ; Guardar nombre (copia segura con límite)
     inc hl ; Saltar byte de estado
-    ld de, hl ; Destino en SRAM
+    push hl
+    pop de ; Destino en SRAM
     ld hl, WALLET_NAME ; Origen en RAM
     ld bc, WALLET_NAME_LEN
     call SRAM_CopyToSRAM_Safe
@@ -331,7 +335,7 @@ SRAM_SaveWallet:
 ; SRAM_DeleteWallet: Marca un wallet como eliminado
 ; Entrada: A = índice wallet (0-based)
 ; Salida: A=0 si éxito
-SRAM_DeleteWallet:
+SRAM_DeleteWallet::
     push bc
     push de
     push hl
@@ -394,7 +398,7 @@ SRAM_DeleteWallet:
 ; SRAM_LogTransaction: Añade una transacción al log
 ; Entrada: AddressBuf y AmountBuf contienen los datos
 ; Salida: A=0 si éxito
-SRAM_LogTransaction:
+SRAM_LogTransaction::
     push bc
     push de
     push hl
@@ -445,7 +449,8 @@ SRAM_LogTransaction:
     ld [hl+], a
     
     ; Copiar monto
-    ld de, hl ; Destino en SRAM
+    push hl
+    pop de ; Destino en SRAM
     ld hl, AmountBuf ; Origen en RAM
     call SRAM_CopyTerminated_Safe ; Copia hasta terminator
     
@@ -486,7 +491,7 @@ SRAM_LogTransaction:
 ; SRAM_CreateWallet: Crea un nuevo wallet con los datos actuales
 ; Entrada: WALLET_NAME y WALLET_ADDR contienen los datos
 ; Salida: A=0 si éxito, 1 si hay errores
-SRAM_CreateWallet:
+SRAM_CreateWallet::
     push bc
     push de
     push hl
@@ -530,7 +535,8 @@ SRAM_CreateWallet:
     ld [hl+], a
     
     ; Copiar nombre
-    ld de, hl ; Destino en SRAM
+    push hl
+    pop de ; Destino en SRAM
     ld hl, WALLET_NAME ; Origen en RAM
     call SRAM_CopyTerminated_Safe ; Copia hasta terminator
     
@@ -591,7 +597,7 @@ SRAM_CreateWallet:
 ; SRAM_Multiply_Optimized: Multiplica HL por BC (optimizado para potencias de 2)
 ; Entrada: HL, BC = operandos
 ; Salida: HL = HL * BC
-SRAM_Multiply_Optimized:
+SRAM_Multiply_Optimized::
     push af
     push bc
     push de
@@ -637,7 +643,7 @@ SRAM_Multiply_Optimized:
 ; SRAM_Multiply: Multiplica HL por BC (versión general)
 ; Entrada: HL, BC = operandos
 ; Salida: HL = HL * BC
-SRAM_Multiply:
+SRAM_Multiply::
     ; Si alguno es cero, resultado es cero
     ld a, h
     or l
@@ -674,7 +680,7 @@ SRAM_Multiply:
     ret
 
 ; SRAM_FillMemory: Llena bc bytes en hl con valor en a
-SRAM_FillMemory:
+SRAM_FillMemory::
     push af
     push bc
     push de
@@ -696,7 +702,7 @@ SRAM_FillMemory:
     ret
 
 ; SRAM_CopyMemory: Copia bc bytes desde hl a de
-SRAM_CopyMemory:
+SRAM_CopyMemory::
     push af
     push bc
     push de
@@ -718,7 +724,7 @@ SRAM_CopyMemory:
     ret
 
 ; SRAM_CopyMemory_Safe: Copia bc bytes desde hl a de con verificación
-SRAM_CopyMemory_Safe:
+SRAM_CopyMemory_Safe::
     push af
     push bc
     push de
@@ -751,7 +757,7 @@ SRAM_CopyMemory_Safe:
     ret
 
 ; SRAM_CopyToSRAM_Safe: Copia bc bytes desde hl (RAM) a de (SRAM) con verificación
-SRAM_CopyToSRAM_Safe:
+SRAM_CopyToSRAM_Safe::
     ; Similar a SRAM_CopyMemory_Safe pero específico para copiar a SRAM
     push af
     push bc
@@ -787,7 +793,7 @@ SRAM_CopyToSRAM_Safe:
 ; SRAM_CopyTerminated_Safe: Copia string terminada en 0 de hl a de
 ; Asume que hay suficiente espacio en destino
 ; Retorna de apuntando después del último byte copiado
-SRAM_CopyTerminated_Safe:
+SRAM_CopyTerminated_Safe::
     push af
     push bc
     push hl
@@ -835,7 +841,7 @@ SRAM_CopyTerminated_Safe:
 ; SRAM_StringLength: Calcula la longitud de una cadena
 ; Entrada: HL = puntero a cadena
 ; Salida: L = longitud
-SRAM_StringLength:
+SRAM_StringLength::
     push af
     push bc
     push hl

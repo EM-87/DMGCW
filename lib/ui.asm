@@ -2,10 +2,12 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
+SECTION "UICode", ROM0
+
 ; --- API pública ---
 
 ; UI_ClearScreen: Limpia toda la pantalla
-UI_ClearScreen:
+UI_ClearScreen::
     ; Preservar registros
     push af
     push bc
@@ -35,7 +37,7 @@ UI_ClearScreen:
 
 ; UI_DrawBox: Dibuja una caja con bordes
 ; Entrada: A=x, B=y, C=width, D=height
-UI_DrawBox:
+UI_DrawBox::
     ; Preservar registros
     push af
     push bc
@@ -115,10 +117,14 @@ UI_DrawBox:
     pop de    ; height
     pop bc    ; y, width
     pop af    ; x
-    
-    ld d, b   ; D = y
-    add d, e  ; D = y + height - 1
-    dec d
+    push af   ; Save x again
+
+    ld a, b   ; A = y
+    add e     ; A = y + height
+    dec a     ; A = y + height - 1
+    ld d, a   ; D = y + height - 1
+
+    pop af
     ld e, a   ; E = x
     
     call UI_GetVRAMPosition
@@ -150,7 +156,7 @@ UI_DrawBox:
 
 ; UI_PrintAtXY: Imprime un carácter en la posición especificada
 ; Entrada: A=carácter, D=y, E=x
-UI_PrintAtXY:
+UI_PrintAtXY::
     push af
     push bc
     push de
@@ -174,7 +180,7 @@ UI_PrintAtXY:
 
 ; UI_PrintStringAtXY: Imprime una cadena en la posición especificada
 ; Entrada: HL=puntero a cadena, D=y, E=x
-UI_PrintStringAtXY:
+UI_PrintStringAtXY::
     push af
     push bc
     push de
@@ -211,7 +217,7 @@ UI_PrintStringAtXY:
 
 ; UI_PrintInBox: Imprime una cadena centrada en un cuadro
 ; Entrada: HL=puntero a cadena, C=box_x, D=box_y, E=box_width
-UI_PrintInBox:
+UI_PrintInBox::
     push af
     push bc
     push de
@@ -240,7 +246,7 @@ UI_PrintInBox:
 
 ; UI_ClearLine: Limpia parte de una línea en la pantalla
 ; Entrada: D=y, E=x de inicio, B=longitud a limpiar
-UI_ClearLine:
+UI_ClearLine::
     push af
     push bc
     push de
@@ -264,7 +270,7 @@ UI_ClearLine:
     ret
 
 ; UI_WaitVBlank: Espera a que ocurra una interrupción VBlank
-UI_WaitVBlank:
+UI_WaitVBlank::
     push af
 .wait:
     ld a, [rLY]
@@ -278,7 +284,7 @@ UI_WaitVBlank:
 ; UI_GetVRAMPosition: Calcula dirección VRAM para coordenadas (D,E)
 ; Entrada: D=y, E=x
 ; Salida: HL=dirección en VRAM
-UI_GetVRAMPosition:
+UI_GetVRAMPosition::
     push af
     push bc
     push de
@@ -309,7 +315,7 @@ UI_GetVRAMPosition:
 ; UI_StringLength: Calcula la longitud de una cadena
 ; Entrada: HL = puntero a cadena
 ; Salida: B = longitud
-UI_StringLength:
+UI_StringLength::
     push af
     push hl
     
@@ -331,7 +337,7 @@ UI_StringLength:
 
 ; UI_DrawHorizontalLine: Dibuja una línea horizontal
 ; Entrada: D=y, E=x inicial, B=longitud, C=carácter
-UI_DrawHorizontalLine:
+UI_DrawHorizontalLine::
     push af
     push bc
     push de
@@ -354,7 +360,7 @@ UI_DrawHorizontalLine:
 
 ; UI_DrawVerticalLine: Dibuja una línea vertical
 ; Entrada: D=y inicial, E=x, B=longitud, C=carácter
-UI_DrawVerticalLine:
+UI_DrawVerticalLine::
     push af
     push bc
     push de

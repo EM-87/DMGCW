@@ -8,28 +8,42 @@ INCLUDE "constants.inc"
 ; --- Dependencias Externas ---
 
 ; --- Constantes del Módulo ---
-PRINTER_INIT        EQU $01, PRINTER_PRINT EQU $02, PRINTER_DATA EQU $04, PRINTER_STATUS EQU $0F
-PRINTER_READY       EQU $00, PRINTER_BUSY   EQU $01, PRINTER_ERROR EQU $FF
-HEADER_SIZE         EQU 4,   FOOTER_SIZE  EQU 2,   DATA_PACKET_SIZE EQU 640
-PRINTER_SYNC_1      EQU $88, PRINTER_SYNC_2 EQU $33
-QR_TILES_WIDTH      EQU 8,   QR_TILES_HEIGHT EQU 8, PRINTER_MARGINS EQU $00
+PRINTER_INIT        EQU $01
+PRINTER_PRINT       EQU $02
+PRINTER_DATA        EQU $04
+PRINTER_STATUS      EQU $0F
+PRINTER_READY       EQU $00
+PRINTER_BUSY        EQU $01
+PRINTER_ERROR       EQU $FF
+HEADER_SIZE         EQU 4
+FOOTER_SIZE         EQU 2
+DATA_PACKET_SIZE    EQU 640
+PRINTER_SYNC_1      EQU $88
+PRINTER_SYNC_2      EQU $33
+QR_TILES_WIDTH      EQU 8
+QR_TILES_HEIGHT     EQU 8
+PRINTER_MARGINS     EQU $00
 PRINTER_TIMEOUT     EQU 1000
 
 ; --- Strings ---
-SECTION "PrinterStrings", ROM1
-PrinterTitle:       DB "IMPRESORA GB",0, PrinterPreparing: DB "Preparando...",0, PrinterWait: DB "Espere...",0
-PrinterSuccess:     DB "QR impreso!",0, PrinterError:     DB "Error impresora.",0
+SECTION "PrinterStrings", ROMX, BANK[1]
+PrinterTitle:       DB "IMPRESORA GB",0
+PrinterPreparing: DB "Preparando...",0
+PrinterWait: DB "Espere...",0
+PrinterSuccess:     DB "QR impreso!",0
+PrinterError:     DB "Error impresora.",0
 NoDataMsg:          DB "No hay datos para imprimir.",0
 
 ; --- Variables WRAM ---
 SECTION "PrinterVars", WRAM0[$CC00]
 PrinterPacket:      DS DATA_PACKET_SIZE + HEADER_SIZE + FOOTER_SIZE
-PrinterResponse:    DS 16, PrintBuffer: DS QR_TILES_WIDTH * QR_TILES_HEIGHT * 16
+PrinterResponse:    DS 16
+PrintBuffer:        DS QR_TILES_WIDTH * QR_TILES_HEIGHT * 16
 
 ; ====================================================================
 ; Entry Point y Flujo Principal
 ; ====================================================================
-SECTION "PrinterModule", ROM1[$5800]
+SECTION "PrinterModule", ROMX[$5800], BANK[1]
 
 Entry_Printer:
     ld hl, AddressBuf
@@ -93,8 +107,10 @@ GetPrinterStatus:
     ld bc, 4
     call CalculateChecksum
     ld hl, PrinterPacket + 6
-    ld [hl+], c
-    ld [hl], b
+    ld a, c
+    ld [hl+], a
+    ld a, b
+    ld [hl], a
     ld hl, PrinterPacket
     ld bc, 8
     call SendToPrinter

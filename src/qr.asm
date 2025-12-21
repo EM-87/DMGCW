@@ -12,7 +12,7 @@ INCLUDE "constants.inc"
 QR_MODULES EQU QR_SIZE * QR_SIZE
 
 ; --- Datos (Strings) ---
-SECTION "QRData", ROM1
+SECTION "QRData", ROMX, BANK[1]
 QRGeneratingMsg: DB "Generando QR...",0
 QRTitle:         DB "CODIGO QR",0
 QRPartialMsg:    DB "(Vista parcial)",0
@@ -29,7 +29,7 @@ QR_Matrix::       DS QR_MODULES
 ; ====================================================================
 ; Punto de Entrada y Flujo Principal
 ; ====================================================================
-SECTION "QRModule", ROM1[$5000]
+SECTION "QRModule", ROMX[$5000], BANK[1]
 
 Entry_QR_Gen:
     call UI_ClearScreen
@@ -44,7 +44,8 @@ Entry_QR_Gen:
 
     ; Codificar datos alfanuméricos
     ld hl, QR_InputBuf
-    call EncodeAlphaNumeric, jr c, .data_exceeds_capacity ; Devuelve carry en error
+    call EncodeAlphaNumeric
+    jr c, .data_exceeds_capacity ; Devuelve carry en error
 
     ; Añadir padding y calcular ECC
     call PadToByte
@@ -52,7 +53,8 @@ Entry_QR_Gen:
     ld hl, QR_BitBuf
     ld b, QR_CAPACITY
     call RS_GenerateECC ; Entrada: HL=datos, B=longitud. Salida: DE=puntero a ECC
-    ex de, hl
+    push de  ; Swap DE and HL (Game Boy compatible)
+    pop hl
     ld de, QR_BitBuf + QR_CAPACITY
     ld bc, QR_EC_SIZE
     call CopyMemory ; Copia el resultado de ECC al final del buffer de bits
@@ -93,9 +95,10 @@ PrepareInputData:
     call StringLength
     ld b, a
     add hl, bc
-    ld a, '|'
+    ld a, $7C  ; ASCII '|'
     ld [hl+], a
-    ld de, hl
+    push hl  ; Swap HL and DE (Game Boy compatible)
+    pop de
     ld hl, AmountBuf
     ld a, [hl]
     or a
@@ -139,10 +142,10 @@ DrawQRScreen:
     call GetModule
     or a
     jr z, .white_module
-    ld a, '#'
+    ld a, $23  ; ASCII '#'
     jr .draw_module
 .white_module:
-    ld a, ' '
+    ld a, $20  ; ASCII space
 .draw_module:
     pop bc
     ld d, b

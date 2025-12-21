@@ -10,7 +10,7 @@ INCLUDE "constants.inc"
 ; ====================================================================
 ; Punto de Entrada y Lógica Principal
 ; ====================================================================
-SECTION "LinkModule", ROM1[$5200]
+SECTION "LinkModule", ROMX[$5200], BANK[1]
 
 Entry_LinkTest:
     ld hl, AddressBuf
@@ -220,8 +220,9 @@ BuildTransactionPayload:
     ld hl, LinkTxBuffer
     call StringLength
     ld c, a
-    ld a, '|'
-    ld [de+], a
+    ld a, $7C  ; ASCII '|'
+    ld [de], a
+    inc de
     ld hl, AmountBuf
     ld a, LINK_MAX_PAYLOAD
     sub c
@@ -301,7 +302,7 @@ LinkReceiveByte:
 ; ====================================================================
 ; UI y Strings
 ; ====================================================================
-SECTION "LinkStrings", ROM1
+SECTION "LinkStrings", ROMX, BANK[1]
 LinkTitle:         DB "CABLE LINK",0
 .connecting_msg:   DB "Conectando...",0
 .handshake_msg:    DB "Estableciendo protocolo...",0

@@ -172,7 +172,7 @@ RunInputTests:
 Test_Input_AddAndBackspace:
     ; ... (código de la prueba sin cambios) ...
     call Input_Init
-    ld a, 'A'
+    ld a, $41  ; ASCII 'A'
     call Input_AddChar
     ld a, 'B'
     call Input_AddChar

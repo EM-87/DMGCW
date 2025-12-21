@@ -4,6 +4,9 @@
 INCLUDE "hardware.inc"
 INCLUDE "constants.inc"
 
+SECTION "DebugCode", ROM0
+
+
 IF DEF(DEBUG)
 
 ; --- Constantes para depuración ---
@@ -38,7 +41,7 @@ ENDM
 ; --- Funciones de depuración ---
 
 ; Debug_Init: Inicializa el sistema de depuración
-Debug_Init:
+Debug_Init::
     ; Limpiar área de depuración
     call Debug_ClearArea
     
@@ -51,7 +54,7 @@ Debug_Init:
     ret
 
 ; Debug_ClearArea: Limpia el área de depuración
-Debug_ClearArea:
+Debug_ClearArea::
     push af
     push bc
     push de
@@ -93,7 +96,7 @@ Debug_ClearArea:
 
 ; Debug_PrintStringAtXY: Imprime una cadena en la posición especificada
 ; Entrada: HL = puntero a cadena, D = Y, E = X
-Debug_PrintStringAtXY:
+Debug_PrintStringAtXY::
     push af
     push bc
     push de
@@ -129,7 +132,7 @@ Debug_PrintStringAtXY:
 
 ; Debug_PrintHexByte: Imprime un byte en formato hexadecimal
 ; Entrada: A = byte a imprimir
-Debug_PrintHexByte:
+Debug_PrintHexByte::
     push af
     push bc
     push de
@@ -184,7 +187,7 @@ Debug_PrintHexByte:
 
 ; Debug_PrintNumber: Imprime un número decimal
 ; Entrada: A = número a imprimir
-Debug_PrintNumber:
+Debug_PrintNumber::
     push af
     push bc
     push de
@@ -246,7 +249,7 @@ Debug_PrintNumber:
 ; Debug_PrintRegisters: Imprime los valores de los registros
 ; Nota: Esta función requiere que los registros se guarden en el stack
 ; en un orden específico antes de llamarla
-Debug_PrintRegisters:
+Debug_PrintRegisters::
     push af
     push bc
     push de
@@ -275,7 +278,7 @@ Debug_PrintRegisters:
 
 ; Debug_BreakPoint: Punto de ruptura para depuración
 ; Detiene la ejecución hasta que se presione un botón
-Debug_BreakPoint:
+Debug_BreakPoint::
     push af
     push hl
     
@@ -309,7 +312,7 @@ Debug_BreakPoint:
 ; Debug_Assert: Verifica una condición y detiene si falla
 ; Entrada: A = valor a verificar (0 = falla)
 ;          HL = mensaje de error
-Debug_Assert:
+Debug_Assert::
     or a
     ret nz          ; Si no es cero, todo bien
     
@@ -332,7 +335,7 @@ Debug_Assert:
 
 ; Debug_MemDump: Muestra contenido de memoria
 ; Entrada: HL = dirección inicial, B = número de bytes
-Debug_MemDump:
+Debug_MemDump::
     push af
     push bc
     push de

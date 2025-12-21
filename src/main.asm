@@ -114,7 +114,9 @@ InitInterrupts:
     ret
 
 InitVRAM:
-    push af, bc, hl
+    push af
+    push bc
+    push hl
     call WaitVBlank
     xor a
     ld [rLCDC], a
@@ -126,26 +128,40 @@ InitVRAM:
     ld [rBGP], a
     ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_BGON
     ld [rLCDC], a
-    pop hl, bc, af
+    pop af
+    pop bc
+    pop hl
     ret
 
 LoadFont:
-    push af, bc, de, hl
+    push af
+    push bc
+    push de
+    push hl
     ld hl, FontData
     ld de, $8000 + (" " * 16)
     ld bc, 96 * 16
     call CopyString
-    pop hl, de, bc, af
+    pop af
+    pop bc
+    pop de
+    pop hl
     ret
 
 ; --- Flujo y UI ---
 VBlankHandler:
-    push af, bc, de, hl
+    push af
+    push bc
+    push de
+    push hl
     ld a, [FrameCounter]
     inc a
     ld [FrameCounter], a
     ; Sound_Update podría ir aquí
-    pop hl, de, bc, af
+    pop af
+    pop bc
+    pop de
+    pop hl
     reti
 
 SwitchBank:
@@ -160,7 +176,10 @@ ExitGame:
     jp $0000
 
 ShowWarning:
-    push af, bc, de, hl
+    push af
+    push bc
+    push de
+    push hl
     call UI_ClearScreen
     ld a, 2
     ld b, 4
@@ -191,11 +210,17 @@ ShowWarning:
     ld a, (1 << BUTTON_A_BIT)
     call WaitButton
     call PlayBeepConfirm
-    pop hl, de, bc, af
+    pop af
+    pop bc
+    pop de
+    pop hl
     ret
 
 DrawMenu:
-    push af, bc, de, hl
+    push af
+    push bc
+    push de
+    push hl
     call UI_ClearScreen
     ld a, 1
     ld b, 1
@@ -217,7 +242,7 @@ DrawMenu:
     ld a, b
     add a
     add 4
-    ld d, a
+    push af          ; Save Y coordinate for later
     ld a, [CursorIndex]
     cp b
     jr nz, .no_cursor
@@ -234,8 +259,10 @@ DrawMenu:
     ld e, [hl]
     inc hl
     ld d, [hl]
-    ex de, hl
-    ld d, [sp]
+    push de  ; Swap DE and HL (Game Boy compatible)
+    pop hl
+    pop af           ; Restore Y coordinate
+    ld d, a
     ld e, 4
     call UI_PrintStringAtXY
     pop hl
@@ -247,7 +274,10 @@ DrawMenu:
     ld d, 15
     ld e, 2
     call UI_PrintStringAtXY
-    pop hl, de, bc, af
+    pop af
+    pop bc
+    pop de
+    pop hl
     ret
 
 ; ====================================================================
@@ -274,9 +304,18 @@ SECTION "MainData", ROM0
 MenuTitle: DB "DMG COLD WALLET",0
 MenuInstr: DB "A:Sel B:Salir",0
 WarningTitle: DB "ADVERTENCIA",0
-WarningMsg1: DB "Esta billetera",0, WarningMsg2: DB "NO usa cifrado",0, WarningMsg3: DB "Solo para DEMO",0, WarningPress: DB "Pulsa A",0
+WarningMsg1: DB "Esta billetera",0
+WarningMsg2: DB "NO usa cifrado",0
+WarningMsg3: DB "Solo para DEMO",0
+WarningPress: DB "Pulsa A",0
 MenuPtrs: DW Item0, Item1, Item2, Item3, Item4, Item5, Item6
-Item0: DB "Nuevo TX",0, Item1: DB "Confirmar",0, Item2: DB "Gestionar W",0, Item3: DB "Enviar Link",0, Item4: DB "Mostrar QR",0, Item5: DB "Imprimir QR",0, Item6: DB "Salir",0
+Item0: DB "Nuevo TX",0
+Item1: DB "Confirmar",0
+Item2: DB "Gestionar W",0
+Item3: DB "Enviar Link",0
+Item4: DB "Mostrar QR",0
+Item5: DB "Imprimir QR",0
+Item6: DB "Salir",0
 
 SECTION "EntryPoints", ROM0
 EntryPoints: DW Entry_Input, Entry_Confirm, Entry_SRAM, Entry_LinkTest, Entry_QR_Gen, Entry_Printer, ExitGame
